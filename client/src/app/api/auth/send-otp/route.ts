@@ -33,7 +33,13 @@ export async function POST(req: NextRequest) {
       "INSERT INTO otps (email, otp, expires_at) VALUES ($1, $2, $3) ON CONFLICT (email) DO UPDATE SET otp = $2, expires_at = $3, used = FALSE, created_at = NOW()",
       [lower, otp, expires]
     );
-
+    console.log({
+      HOST: process.env.SMTP_HOST,
+      PORT: process.env.SMTP_PORT,
+      SECURE: process.env.SMTP_SECURE,
+      USER: process.env.SMTP_USER,
+      PASS_EXISTS: !!process.env.SMTP_PASS,
+    });
     await sendOtpEmail(lower, otp);
 
     return NextResponse.json({ success: true });
