@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
     // Rate-limit: max 3 OTPs per email per 10 minutes
     const { rows: recent } = await pool.query(
-      `SELECT COUNT(*) FROM otp_codes WHERE email = $1 AND created_at > NOW() - INTERVAL '10 minutes'`,
+      `SELECT COUNT(*) FROM otps WHERE email = $1 AND created_at > NOW() - INTERVAL '10 minutes'`,
       [lower]
     );
     if (parseInt(recent[0].count) >= 3) {
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
 
     // Upsert — same pattern as send-otp route
     await pool.query(
-      `INSERT INTO otp_codes (email, otp, expires_at)
+      `INSERT INTO otps (email, otp, expires_at)
        VALUES ($1, $2, $3)
        ON CONFLICT (email) DO UPDATE SET otp = $2, expires_at = $3, used = FALSE, created_at = NOW()`,
       [lower, otp, expires]

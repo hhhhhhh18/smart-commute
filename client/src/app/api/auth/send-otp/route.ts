@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
 
     // Rate-limit: max 3 OTPs per email per 10 minutes
     const { rows: recent } = await pool.query(
-      `SELECT COUNT(*) FROM otp_codes
+      `SELECT COUNT(*) FROM otps
        WHERE email = $1 AND created_at > NOW() - INTERVAL '10 minutes'`,
       [lower]
     );
@@ -23,14 +23,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Too many OTP requests. Please wait 10 minutes." }, { status: 429 });
 
     // Invalidate old codes for this email
-    await pool.query("UPDATE otp_codes SET used = TRUE WHERE email = $1 AND used = FALSE", [lower]);
+    await pool.query("UPDATE otps SET used = TRUE WHERE email = $1 AND used = FALSE", [lower]);
 
     const otp     = generateOtp();
     const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 min
 
     // ── FIX: column is "otp", not "code" ──────────────────────
     await pool.query(
-      "INSERT INTO otp_codes (email, otp, expires_at) VALUES ($1, $2, $3) ON CONFLICT (email) DO UPDATE SET otp = $2, expires_at = $3, used = FALSE, created_at = NOW()",
+      "INSERT INTO otps (email, otp, expires_at) VALUES ($1, $2, $3) ON CONFLICT (email) DO UPDATE SET otp = $2, expires_at = $3, used = FALSE, created_at = NOW()",
       [lower, otp, expires]
     );
 
