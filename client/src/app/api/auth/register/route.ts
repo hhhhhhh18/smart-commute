@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     const hash = await bcrypt.hash(password, 12);
 
     await pool.query(
-      `INSERT INTO users (name, email, password, email_verified, provider)
+      `INSERT INTO users (name, email, password_hash, email_verified, provider)
        VALUES ($1, $2, $3, FALSE, 'credentials')`,
       [name.trim(), lower, hash]
     );
