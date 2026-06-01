@@ -151,6 +151,8 @@ export default function Map({ fromCoords, toCoords, routeConfig, selectedRouteId
 
         // ── Fallback if no allRoutes ──────────────────────────
         if (!allRoutes?.length) {
+          if (!fromCoords || !toCoords) return;
+
           const url =
             `https://router.project-osrm.org/route/v1/driving/` +
             `${fromCoords[1]},${fromCoords[0]};${toCoords[1]},${toCoords[0]}` +
