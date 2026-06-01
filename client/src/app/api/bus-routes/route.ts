@@ -229,7 +229,8 @@ function nameScore(gtfsN: string, query: string): number {
   if (gtfsN === query) return 100;
   if (query.length >= 4 && gtfsN.includes(query)) return 85;
   if (gtfsN.length >= 4 && query.includes(gtfsN)) return 75;
-  const tg = gtfsN.match(/.{3}/g) ?? [], tq = query.match(/.{3}/g) ?? [];
+  const tg: string[] = gtfsN.match(/.{3}/g) ?? [];
+const tq: string[] = query.match(/.{3}/g) ?? [];
   return tg.filter(t => tq.includes(t)).length * 12;
 }
 
