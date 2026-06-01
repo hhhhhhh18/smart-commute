@@ -35,10 +35,16 @@ export const authOptions: NextAuthOptions = {
         );
         const user = rows[0];
         if (!user) throw new Error("No account found with this email.");
-        if (!user.password) throw new Error("This account uses Google sign-in.");
-        if (!user.email_verified) throw new Error("Please verify your email before logging in.");
-
-        const valid = await bcrypt.compare(credentials.password, user.password);
+        if (!user.password_hash)
+          throw new Error("No password set for this account.");
+        
+        if (!user.email_verified)
+          throw new Error("Please verify your email before logging in.");
+        
+        const valid = await bcrypt.compare(
+          credentials.password,
+          user.password_hash
+        );
         if (!valid) throw new Error("Incorrect password.");
 
         return { id: String(user.id), name: user.name, email: user.email };
@@ -51,7 +57,7 @@ export const authOptions: NextAuthOptions = {
     async signIn({ user, account }) {
       if (account?.provider === "google") {
         await pool.query(
-          `INSERT INTO users (name, email, email_verified, provider)
+          `INSERT INTO users (name, email, password_hash,email_verified, provider)
            VALUES ($1, $2, TRUE, 'google')
            ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name`,
           [user.name, user.email?.toLowerCase()]
