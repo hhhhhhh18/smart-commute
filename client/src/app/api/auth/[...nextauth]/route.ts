@@ -59,7 +59,9 @@ export const authOptions: NextAuthOptions = {
         await pool.query(
           `INSERT INTO users (name, email, password_hash,email_verified, provider)
            VALUES ($1, $2, TRUE, 'google')
-           ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name`,
+           ON CONFLICT (email)
+DO UPDATE SET
+  name = EXCLUDED.name`,
           [user.name, user.email?.toLowerCase()]
         );
       }
