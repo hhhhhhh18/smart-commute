@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import bcrypt from "bcryptjs";
@@ -6,9 +5,14 @@ import bcrypt from "bcryptjs";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null);
-    const { email, code, password } = body ?? {};
 
-    if (!email || !code || !password) {
+    // ── FIX: Accept both "otp" and "code" from the request body ──────────────
+    // The reset-password page sends { email, otp, password }
+    // but this API was destructuring "code" — causing the "required" error.
+    const { email, otp, code, password } = body ?? {};
+    const otpValue = (otp ?? code ?? "").toString().trim();
+
+    if (!email || !otpValue || !password) {
       return NextResponse.json(
         { error: "Email, code, and password are required." },
         { status: 400 }
@@ -35,11 +39,11 @@ export async function POST(req: NextRequest) {
     // Verify OTP — must be unused and not expired
     const { rows } = await pool.query(
       `SELECT * FROM otp_codes
-       WHERE email = $1
-         AND otp   = $2
-         AND used  = FALSE
+       WHERE email      = $1
+         AND otp        = $2
+         AND used       = FALSE
          AND expires_at > NOW()`,
-      [lower, code.trim()]
+      [lower, otpValue]
     );
 
     if (!rows[0]) {
