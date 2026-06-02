@@ -16,9 +16,28 @@ export async function POST(req: NextRequest) {
     const { rows } = await pool.query("SELECT id, provider FROM users WHERE email = $1", [lower]);
 
     if (rows[0]) {
-      if (rows[0].provider === "google")
-        return NextResponse.json({ error: "This email is linked to a Google account. Sign in with Google." }, { status: 409 });
-      return NextResponse.json({ error: "An account with this email already exists." }, { status: 409 });
+
+      // Existing Google account -> attach password
+      if (rows[0].provider === "google" && !rows[0].password_hash) {
+    
+        const hash = await bcrypt.hash(password, 12);
+    
+        await pool.query(
+          `UPDATE users
+           SET password_hash = $1
+           WHERE email = $2`,
+          [hash, lower]
+        );
+    
+        return NextResponse.json({
+          success: true,
+          message: "Password added successfully. You can now login with both Google and password."
+        });
+      }
+    
+      return NextResponse.json({
+        error: "An account with this email already exists."
+      }, { status: 409 });
     }
 
     const hash = await bcrypt.hash(password, 12);
