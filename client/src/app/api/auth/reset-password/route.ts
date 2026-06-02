@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     await pool.query("BEGIN");
     try {
       await pool.query(
-        "UPDATE users SET password = $1 WHERE email = $2",
+        "UPDATE users SET password_hash = $1, provider = 'both' WHERE email = $2",
         [hash, lower]
       );
       await pool.query(

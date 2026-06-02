@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
 
     // Check if account exists
     const { rows } = await pool.query(
-      "SELECT id, password FROM users WHERE email = $1",
+      "SELECT id, password_hash FROM users WHERE email = $1",
       [lower]
     );
 
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     }
 
     // If user has no password yet (Google-only account)
-    if (!rows[0].password) {
+    if (!rows[0].password_hash) {
       return NextResponse.json(
         { error: "This account does not have a password yet. Please create one first." },
         { status: 400 }
