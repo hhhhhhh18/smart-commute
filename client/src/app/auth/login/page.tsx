@@ -164,13 +164,11 @@ function CityScene() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// KEY FIX: useSearchParams() MUST be in a child component wrapped in <Suspense>
-// Otherwise Next.js build fails with:
-//   "useSearchParams() should be wrapped in a suspense boundary"
+// LoginForm — inside Suspense because it uses useSearchParams()
 // ─────────────────────────────────────────────────────────────────────────────
 function LoginForm() {
   const router       = useRouter();
-  const searchParams = useSearchParams();   // ← inside Suspense boundary ✓
+  const searchParams = useSearchParams();
 
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
@@ -179,37 +177,99 @@ function LoginForm() {
   const [error,    setError]    = useState("");
   const [loading,  setLoading]  = useState(false);
 
-  // Pick up error passed via URL (e.g. from NextAuth callback)
+  // Pick up error passed via URL from NextAuth callback
   useEffect(() => {
     const urlError = searchParams.get("error");
-    if (urlError) setError(decodeURIComponent(urlError));
+    if (urlError) {
+      // NextAuth passes coded errors — translate to human-readable
+      const mapped: Record<string, string> = {
+        OAuthAccountNotLinked: "This email is already registered with a different sign-in method.",
+        OAuthSignin:           "Google sign-in failed. Please try again.",
+        OAuthCallback:         "Google sign-in failed. Please try again.",
+        CredentialsSignin:     "Incorrect email or password.",
+        SessionRequired:       "Please sign in to continue.",
+        Default:               "Something went wrong. Please try again.",
+      };
+      setError(mapped[urlError] || decodeURIComponent(urlError));
+    }
   }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(""); setLoading(true);
+    setError("");
+    setLoading(true);
+
     try {
-      // Step 1: pre-validate to get real error messages
-      const check = await fetch("/api/auth/check-credentials", {
+      // ── Step 1: Pre-validate via custom endpoint to get real error messages ──
+      const checkRes = await fetch("/api/auth/check-credentials", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ email: email.toLowerCase(), password }),
+        body:    JSON.stringify({ email: email.toLowerCase().trim(), password }),
       });
-      const data = await check.json();
-      if (!check.ok) { setError(data.error ?? "Something went wrong."); setLoading(false); return; }
 
-      // Step 2: credentials valid — create NextAuth session
-      const res = await signIn("credentials", { email: email.toLowerCase(), password, redirect: false });
-      if (res?.error) setError("Sign-in failed. Please try again.");
-      else { router.replace("/"); router.refresh(); }
-    } catch { setError("Network error. Please check your connection."); }
-    finally { setLoading(false); }
+      // Surface real backend errors instead of generic catch message
+      if (!checkRes.ok) {
+        let errMsg = "Invalid email or password.";
+        try {
+          const errData = await checkRes.json();
+          if (errData?.error) errMsg = errData.error;
+        } catch {}
+        setError(errMsg);
+        setLoading(false);
+        return;
+      }
+
+      // ── Step 2: Credentials valid — create NextAuth session ──────────────
+      const res = await signIn("credentials", {
+        email:    email.toLowerCase().trim(),
+        password,
+        redirect: false,   // MUST be false to handle errors in-page
+      });
+
+      if (!res) {
+        setError("Sign-in failed. Please try again.");
+        setLoading(false);
+        return;
+      }
+
+      if (res.error) {
+        // Map NextAuth error codes to friendly messages
+        const mapped: Record<string, string> = {
+          CredentialsSignin: "Incorrect email or password.",
+          Default:           "Sign-in failed. Please try again.",
+        };
+        setError(mapped[res.error] || res.error);
+        setLoading(false);
+        return;
+      }
+
+      // ── Success ──────────────────────────────────────────────────────────
+      router.replace("/");
+      router.refresh();
+
+    } catch (err: any) {
+      // Show actual fetch/network error instead of generic message
+      console.error("[Login] unexpected error:", err);
+      setError(
+        err?.message
+          ? `Error: ${err.message}`
+          : "Connection failed. Please check your internet and try again."
+      );
+      setLoading(false);
+    }
   }
 
-  async function handleGoogle() { setLoading(true); await signIn("google", { callbackUrl: "/" }); }
+  async function handleGoogle() {
+    setLoading(true);
+    setError("");
+    await signIn("google", { callbackUrl: "/" });
+  }
 
-  const isGoogleAccount = error.toLowerCase().includes("google") || error.toLowerCase().includes("credentialssignin");
-  const errorMsg = isGoogleAccount ? "" : error;
+  // Detect if error is Google-account related
+  const isGoogleAccount =
+    error.toLowerCase().includes("google") ||
+    error.toLowerCase().includes("oauthaccountnotlinked") ||
+    error.toLowerCase().includes("different sign-in method");
 
   return (
     <div style={{ maxWidth:"460px", width:"100%" }}>
@@ -232,7 +292,9 @@ function LoginForm() {
           <label style={LS.label}>Email address</label>
           <div style={{ position:"relative" }}>
             <span style={LS.inputIcon}><MailIcon /></span>
-            <input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="Enter your email" style={{ ...LS.input, paddingLeft:"44px" }} />
+            <input type="email" required value={email} onChange={e=>setEmail(e.target.value)}
+              placeholder="Enter your email"
+              style={{ ...LS.input, paddingLeft:"44px" }} />
           </div>
         </div>
 
@@ -240,8 +302,11 @@ function LoginForm() {
           <label style={LS.label}>Password</label>
           <div style={{ position:"relative" }}>
             <span style={LS.inputIcon}><LockIcon /></span>
-            <input type={showPw?"text":"password"} required value={password} onChange={e=>setPassword(e.target.value)} placeholder="Enter your password" style={{ ...LS.input, paddingLeft:"44px", paddingRight:"44px" }} />
-            <button type="button" className="eye-btn" onClick={()=>setShowPw(v=>!v)} style={{ position:"absolute", right:"14px", top:"50%", transform:"translateY(-50%)" }}>
+            <input type={showPw?"text":"password"} required value={password} onChange={e=>setPassword(e.target.value)}
+              placeholder="Enter your password"
+              style={{ ...LS.input, paddingLeft:"44px", paddingRight:"44px" }} />
+            <button type="button" className="eye-btn" onClick={()=>setShowPw(v=>!v)}
+              style={{ position:"absolute", right:"14px", top:"50%", transform:"translateY(-50%)" }}>
               {showPw ? <EyeOff /> : <EyeOn />}
             </button>
           </div>
@@ -249,26 +314,30 @@ function LoginForm() {
 
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <label style={{ display:"flex", alignItems:"center", gap:"8px", fontSize:"13px", color:"#475569", cursor:"pointer" }}>
-            <input type="checkbox" checked={remember} onChange={e=>setRemember(e.target.checked)} style={{ width:"16px", height:"16px", accentColor:"#1565C0" }} />
+            <input type="checkbox" checked={remember} onChange={e=>setRemember(e.target.checked)}
+              style={{ width:"16px", height:"16px", accentColor:"#1565C0" }} />
             Remember me
           </label>
-          <Link href="/auth/forgot-password" style={{ fontSize:"13px", color:"#1565C0", fontWeight:"600", textDecoration:"none" }}>Forgot password?</Link>
+          <Link href="/auth/forgot-password" style={{ fontSize:"13px", color:"#1565C0", fontWeight:"600", textDecoration:"none" }}>
+            Forgot password?
+          </Link>
         </div>
 
+        {/* Error display */}
         {error && (
           isGoogleAccount ? (
             <div style={{ background:"#FFF3E0", border:"1.5px solid #FFB74D", borderRadius:"10px", padding:"12px 16px", fontSize:"13px", color:"#E65100", lineHeight:"1.6" }}>
               <strong>⚠️ This email uses Google Sign-In.</strong><br />
-              Please use the <strong>Continue with Google</strong> button above,{" "}
-              or{" "}
-              <Link href={`/auth/register?email=${encodeURIComponent(email)}&setPassword=true`} style={{ color:"#1565C0", fontWeight:"700", textDecoration:"underline" }}>
+              Please use the <strong>Continue with Google</strong> button above, or{" "}
+              <Link href={`/auth/register?email=${encodeURIComponent(email)}&setPassword=true`}
+                style={{ color:"#1565C0", fontWeight:"700", textDecoration:"underline" }}>
                 set a password here
               </Link>{" "}
               to enable email login.
             </div>
           ) : (
             <div style={{ background:"#FEF2F2", border:"1px solid #fecaca", color:"#DC2626", borderRadius:"10px", padding:"10px 14px", fontSize:"13px" }}>
-              ⚠️ {errorMsg}
+              ⚠️ {error}
             </div>
           )
         )}
@@ -297,7 +366,6 @@ function LoginForm() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main export — LoginPage wraps LoginForm in <Suspense>
-// This satisfies Next.js requirement for useSearchParams() at build time.
 // ─────────────────────────────────────────────────────────────────────────────
 export default function LoginPage() {
   return (
@@ -349,13 +417,8 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* ── RIGHT: Login Form wrapped in Suspense ── */}
+          {/* ── RIGHT: Login Form in Suspense ── */}
           <div className="split-right" style={{ width:"54%", minWidth:"54%", maxWidth:"54%", background:"white", display:"flex", flexDirection:"column", justifyContent:"center", alignItems:"center", padding:"40px", overflowY:"auto" }}>
-            {/*
-              Suspense is REQUIRED here because LoginForm calls useSearchParams().
-              Without this, Next.js static page generation fails at build time.
-              The fallback renders a minimal spinner so the page doesn't flash.
-            */}
             <Suspense fallback={
               <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"12px", color:"#94a3b8" }}>
                 <div style={{ width:"32px", height:"32px", border:"3px solid #e2e8f0", borderTop:"3px solid #1565C0", borderRadius:"50%", animation:"spin 0.8s linear infinite" }} />
@@ -403,17 +466,17 @@ function Footer() {
   );
 }
 
-// ── Icon components ───────────────────────────────────────────
+// ── Styles & Icons ────────────────────────────────────────────
 const LS: Record<string, React.CSSProperties> = {
   label:     { display:"block", fontSize:"13px", fontWeight:"700", color:"#374151", marginBottom:"7px" },
   input:     { width:"100%", padding:"11px 14px", borderRadius:"10px", border:"1.5px solid #e2e8f0", fontSize:"14px", color:"#1a1a1a", background:"white", transition:"border-color .15s, box-shadow .15s" },
   inputIcon: { position:"absolute", left:"14px", top:"50%", transform:"translateY(-50%)", color:"#94a3b8", display:"flex", alignItems:"center" },
 };
 
-function GoogleIcon() { return <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>; }
-function MailIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>; }
-function LockIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>; }
-function EyeOn()   { return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>; }
-function EyeOff()  { return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>; }
-function ShieldIcon() { return <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#0891b2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink:0, marginTop:"2px" }}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>; }
-function SignInIcon() { return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>; }
+function GoogleIcon()  { return <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>; }
+function MailIcon()    { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>; }
+function LockIcon()    { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>; }
+function EyeOn()       { return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>; }
+function EyeOff()      { return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>; }
+function ShieldIcon()  { return <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#0891b2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink:0, marginTop:"2px" }}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>; }
+function SignInIcon()   { return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>; }
