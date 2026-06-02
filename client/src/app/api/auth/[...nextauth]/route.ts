@@ -34,13 +34,22 @@ export const authOptions: NextAuthOptions = {
           [credentials.email.toLowerCase()]
         );
         const user = rows[0];
+
         if (!user) throw new Error("No account found with this email.");
-        if (!user.password_hash){
-          throw new Error("No password set for this account.");
+
+        // ── FIX BUG 2: Google user with no password ───────────────────────
+        // Instead of a cryptic error, tell them exactly what to do.
+        if (!user.password_hash) {
+          throw new Error(
+            "GOOGLE_ACCOUNT_NO_PASSWORD"
+            // This code is caught by the login page to show a friendly message
+            // with a link to set a password via the register page.
+          );
         }
+
         if (!user.email_verified)
           throw new Error("Please verify your email before logging in.");
-        
+
         const valid = await bcrypt.compare(
           credentials.password,
           user.password_hash
@@ -53,18 +62,27 @@ export const authOptions: NextAuthOptions = {
   ],
 
   callbacks: {
-    // After Google sign-in: upsert user into DB
+    // ── FIX BUG 1: Correct SQL — parameters match columns ────────────────
     async signIn({ user, account }) {
       if (account?.provider === "google") {
-        await pool.query(
-          `INSERT INTO users (name, email, password_hash,email_verified, provider)
-           VALUES ($1, $2, TRUE, 'google')
-      ON CONFLICT (email)
-DO UPDATE SET
-  name = EXCLUDED.name,
-  provider = 'google'`,
-          [user.name, user.email?.toLowerCase()]
-        );
+        try {
+          await pool.query(
+            `INSERT INTO users (name, email, password_hash, email_verified, provider)
+             VALUES ($1, $2, NULL, TRUE, 'google')
+             ON CONFLICT (email) DO UPDATE SET
+               name           = EXCLUDED.name,
+               email_verified = TRUE,
+               provider       = CASE
+                                  -- Keep 'both' if user already has a password
+                                  WHEN users.password_hash IS NOT NULL THEN 'both'
+                                  ELSE 'google'
+                                END`,
+            [user.name, user.email?.toLowerCase()]
+          );
+        } catch (err) {
+          console.error("[signIn:google] DB error:", err);
+          return false; // Prevent sign-in on DB failure
+        }
       }
       return true;
     },

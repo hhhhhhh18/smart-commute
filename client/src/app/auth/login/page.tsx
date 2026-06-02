@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 // ── 3D City Scene ─────────────────────────────────────────────
@@ -19,28 +19,24 @@ function CityScene() {
       const W = mountRef.current!.clientWidth;
       const H = mountRef.current!.clientHeight;
 
-      // Renderer
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setSize(W, H);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.shadowMap.enabled = true;
       mountRef.current!.appendChild(renderer.domElement);
 
-      // Scene + Camera
       scene = new THREE.Scene();
       scene.fog = new THREE.FogExp2(0x0a1628, 0.035);
       camera = new THREE.PerspectiveCamera(55, W / H, 0.1, 200);
       camera.position.set(0, 14, 28);
       camera.lookAt(0, 0, 0);
 
-      // ── Lighting ──
       scene.add(new THREE.AmbientLight(0x334466, 1.2));
       const dir = new THREE.DirectionalLight(0xffffff, 1.5);
       dir.position.set(10, 20, 10);
       dir.castShadow = true;
       scene.add(dir);
 
-      // Blue point lights for city glow
       const cityGlow = new THREE.PointLight(0x3b82f6, 3, 40);
       cityGlow.position.set(0, 5, 0);
       scene.add(cityGlow);
@@ -48,21 +44,16 @@ function CityScene() {
       pinkGlow.position.set(-8, 3, -5);
       scene.add(pinkGlow);
 
-      // ── Ground ──
       const groundGeo = new THREE.PlaneGeometry(80, 80, 20, 20);
-      const groundMat = new THREE.MeshStandardMaterial({
-        color: 0x0d1f3c, roughness: 0.9, metalness: 0.1,
-      });
+      const groundMat = new THREE.MeshStandardMaterial({ color: 0x0d1f3c, roughness: 0.9, metalness: 0.1 });
       const ground = new THREE.Mesh(groundGeo, groundMat);
       ground.rotation.x = -Math.PI / 2;
       ground.receiveShadow = true;
       scene.add(ground);
 
-      // ── Grid lines on ground ──
       const gridHelper = new THREE.GridHelper(60, 30, 0x1e3a5f, 0x1e3a5f);
       scene.add(gridHelper);
 
-      // ── Buildings ──
       const buildingColors = [0x1565c0, 0x0d47a1, 0x1976d2, 0x1e40af, 0x2563eb, 0x1d4ed8];
       const buildingData = [
         { x: -12, z: -8,  w: 2.5, h: 12, d: 2.5 },
@@ -92,7 +83,6 @@ function CityScene() {
         mesh.castShadow = true;
         scene.add(mesh);
 
-        // Windows (small yellow glowing boxes)
         for (let row = 1; row < Math.floor(b.h / 2); row++) {
           for (let col = -1; col <= 1; col++) {
             if (Math.random() > 0.4) {
@@ -103,28 +93,20 @@ function CityScene() {
                 emissiveIntensity: 1.5,
               });
               const win = new THREE.Mesh(wGeo, wMat);
-              win.position.set(
-                b.x + col * (b.w / 3),
-                row * 1.5,
-                b.z + b.d / 2 + 0.02
-              );
+              win.position.set(b.x + col * (b.w / 3), row * 1.5, b.z + b.d / 2 + 0.02);
               scene.add(win);
             }
           }
         }
       });
 
-      // ── Roads ──
       const roadMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 1 });
-      // Horizontal road
       const hRoad = new THREE.Mesh(new THREE.BoxGeometry(60, 0.05, 3), roadMat);
       hRoad.position.set(0, 0.01, 2);
       scene.add(hRoad);
-      // Vertical road
       const vRoad = new THREE.Mesh(new THREE.BoxGeometry(3, 0.05, 40), roadMat);
       vRoad.position.set(0, 0.01, -5);
       scene.add(vRoad);
-      // Road markings
       for (let i = -12; i <= 12; i += 3) {
         const mark = new THREE.Mesh(
           new THREE.BoxGeometry(1.5, 0.06, 0.2),
@@ -134,14 +116,10 @@ function CityScene() {
         scene.add(mark);
       }
 
-      // ── Metro elevated rail ──
-      const railMat = new THREE.MeshStandardMaterial({
-        color: 0x60a5fa, emissive: 0x60a5fa, emissiveIntensity: 0.4, metalness: 0.8
-      });
+      const railMat = new THREE.MeshStandardMaterial({ color: 0x60a5fa, emissive: 0x60a5fa, emissiveIntensity: 0.4, metalness: 0.8 });
       const rail = new THREE.Mesh(new THREE.BoxGeometry(50, 0.15, 0.4), railMat);
       rail.position.set(0, 6, -6);
       scene.add(rail);
-      // Rail pillars
       for (let x = -12; x <= 12; x += 6) {
         const pillar = new THREE.Mesh(
           new THREE.CylinderGeometry(0.15, 0.2, 6, 8),
@@ -151,40 +129,23 @@ function CityScene() {
         scene.add(pillar);
       }
 
-      // ── Moving Vehicles ──
       const vehicles: any[] = [];
 
       function makeBus(color: number) {
         const g = new THREE.Group();
-        // Body
-        const body = new THREE.Mesh(
-          new THREE.BoxGeometry(2.2, 0.9, 0.9),
-          new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.5 })
-        );
+        const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.9, 0.9), new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.5 }));
         g.add(body);
-        // Roof
-        const roof = new THREE.Mesh(
-          new THREE.BoxGeometry(2.0, 0.15, 0.85),
-          new THREE.MeshStandardMaterial({ color, roughness: 0.5 })
-        );
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.15, 0.85), new THREE.MeshStandardMaterial({ color, roughness: 0.5 }));
         roof.position.y = 0.5;
         g.add(roof);
-        // Windows
         [-0.5, 0.1, 0.7].forEach(xOff => {
-          const w = new THREE.Mesh(
-            new THREE.BoxGeometry(0.4, 0.35, 0.05),
-            new THREE.MeshStandardMaterial({ color: 0x93c5fd, emissive: 0x93c5fd, emissiveIntensity: 0.6 })
-          );
+          const w = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.35, 0.05), new THREE.MeshStandardMaterial({ color: 0x93c5fd, emissive: 0x93c5fd, emissiveIntensity: 0.6 }));
           w.position.set(xOff, 0.1, 0.46);
           g.add(w);
         });
-        // Wheels
         [[0.7, -0.4], [-0.7, -0.4]].forEach(([xw]) => {
           [-0.5, 0.5].forEach(zw => {
-            const wheel = new THREE.Mesh(
-              new THREE.CylinderGeometry(0.2, 0.2, 0.15, 12),
-              new THREE.MeshStandardMaterial({ color: 0x1f2937, metalness: 0.8 })
-            );
+            const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.15, 12), new THREE.MeshStandardMaterial({ color: 0x1f2937, metalness: 0.8 }));
             wheel.rotation.z = Math.PI / 2;
             wheel.position.set(xw, -0.45, zw);
             g.add(wheel);
@@ -195,23 +156,13 @@ function CityScene() {
 
       function makeCar(color: number) {
         const g = new THREE.Group();
-        const body = new THREE.Mesh(
-          new THREE.BoxGeometry(1.4, 0.5, 0.7),
-          new THREE.MeshStandardMaterial({ color, roughness: 0.2, metalness: 0.7 })
-        );
+        const body = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.5, 0.7), new THREE.MeshStandardMaterial({ color, roughness: 0.2, metalness: 0.7 }));
         g.add(body);
-        const cab = new THREE.Mesh(
-          new THREE.BoxGeometry(0.8, 0.4, 0.65),
-          new THREE.MeshStandardMaterial({ color, roughness: 0.2, metalness: 0.5 })
-        );
+        const cab = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.4, 0.65), new THREE.MeshStandardMaterial({ color, roughness: 0.2, metalness: 0.5 }));
         cab.position.set(-0.1, 0.4, 0);
         g.add(cab);
-        // Headlights
         [0.4, -0.4].forEach(z => {
-          const hl = new THREE.Mesh(
-            new THREE.SphereGeometry(0.08, 8, 8),
-            new THREE.MeshStandardMaterial({ color: 0xfef3c7, emissive: 0xfef3c7, emissiveIntensity: 2 })
-          );
+          const hl = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshStandardMaterial({ color: 0xfef3c7, emissive: 0xfef3c7, emissiveIntensity: 2 }));
           hl.position.set(0.7, 0.05, z);
           g.add(hl);
         });
@@ -221,18 +172,11 @@ function CityScene() {
       function makeMetroTrain() {
         const g = new THREE.Group();
         [0, 2.4, -2.4].forEach(xOff => {
-          const car = new THREE.Mesh(
-            new THREE.BoxGeometry(2.0, 0.7, 0.7),
-            new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.2, metalness: 0.8, emissive: 0x1d4ed8, emissiveIntensity: 0.2 })
-          );
+          const car = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.7, 0.7), new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.2, metalness: 0.8, emissive: 0x1d4ed8, emissiveIntensity: 0.2 }));
           car.position.x = xOff;
           g.add(car);
-          // Windows
           [-0.4, 0.4].forEach(xw => {
-            const w = new THREE.Mesh(
-              new THREE.BoxGeometry(0.5, 0.3, 0.05),
-              new THREE.MeshStandardMaterial({ color: 0xbfdbfe, emissive: 0xbfdbfe, emissiveIntensity: 0.8 })
-            );
+            const w = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.05), new THREE.MeshStandardMaterial({ color: 0xbfdbfe, emissive: 0xbfdbfe, emissiveIntensity: 0.8 }));
             w.position.set(xOff + xw, 0.1, 0.36);
             g.add(w);
           });
@@ -240,7 +184,6 @@ function CityScene() {
         return g;
       }
 
-      // Bus on horizontal road
       const bus1 = makeBus(0x1565c0);
       bus1.position.set(-20, 0.5, 1.2);
       scene.add(bus1);
@@ -252,7 +195,6 @@ function CityScene() {
       scene.add(bus2);
       vehicles.push({ mesh: bus2, type: "bus_h_rev", speed: 0.05, pos: 15 });
 
-      // Cars on road
       const car1 = makeCar(0xe65100);
       car1.position.set(-10, 0.28, 1.2);
       scene.add(car1);
@@ -264,45 +206,28 @@ function CityScene() {
       scene.add(car2);
       vehicles.push({ mesh: car2, type: "car_h_rev", speed: 0.09, pos: 8 });
 
-      // Metro train on elevated rail
       const metro = makeMetroTrain();
       metro.position.set(-22, 6.4, -6);
       scene.add(metro);
       vehicles.push({ mesh: metro, type: "metro", speed: 0.08, pos: -22 });
 
-      // ── Stars / particles ──
       const starsGeo = new THREE.BufferGeometry();
       const starVerts = [];
       for (let i = 0; i < 300; i++) {
-        starVerts.push(
-          (Math.random() - 0.5) * 120,
-          Math.random() * 40 + 10,
-          (Math.random() - 0.5) * 120
-        );
+        starVerts.push((Math.random() - 0.5) * 120, Math.random() * 40 + 10, (Math.random() - 0.5) * 120);
       }
       starsGeo.setAttribute("position", new THREE.Float32BufferAttribute(starVerts, 3));
-      const stars = new THREE.Points(
-        starsGeo,
-        new THREE.PointsMaterial({ color: 0xffffff, size: 0.12, transparent: true, opacity: 0.7 })
-      );
+      const stars = new THREE.Points(starsGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.12, transparent: true, opacity: 0.7 }));
       scene.add(stars);
 
-      // ── Moon ──
-      const moon = new THREE.Mesh(
-        new THREE.SphereGeometry(1.5, 16, 16),
-        new THREE.MeshStandardMaterial({ color: 0xe2e8f0, emissive: 0xd1d5db, emissiveIntensity: 0.5 })
-      );
+      const moon = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), new THREE.MeshStandardMaterial({ color: 0xe2e8f0, emissive: 0xd1d5db, emissiveIntensity: 0.5 }));
       moon.position.set(15, 25, -30);
       scene.add(moon);
 
-      // ── Floating transport icons (torus rings) ──
       const ringColors = [0x3b82f6, 0x22c55e, 0xf59e0b, 0x8b5cf6];
       const rings: any[] = [];
       ringColors.forEach((col, i) => {
-        const ring = new THREE.Mesh(
-          new THREE.TorusGeometry(0.6, 0.08, 12, 40),
-          new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.8, metalness: 0.9 })
-        );
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.08, 12, 40), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.8, metalness: 0.9 }));
         const angle = (i / ringColors.length) * Math.PI * 2;
         ring.position.set(Math.cos(angle) * 8, 10 + Math.sin(angle) * 2, Math.sin(angle) * 8 - 5);
         ring.userData = { angle, speed: 0.008 + i * 0.002, radius: 8, baseY: 10 + Math.sin(angle) * 2, yOff: i };
@@ -310,15 +235,12 @@ function CityScene() {
         rings.push(ring);
       });
 
-      // ── Animate ──
       let t = 0;
       function animate() {
         animId = requestAnimationFrame(animate);
         t += 0.01;
-
-        // Vehicles
         vehicles.forEach(v => {
-          if (v.type === "bus_h" || v.type === "car_h") {
+          if (v.type === "bus_h" || v.type === "car_h" || v.type === "metro") {
             v.pos += v.speed;
             if (v.pos > 25) v.pos = -25;
             v.mesh.position.x = v.pos;
@@ -326,14 +248,8 @@ function CityScene() {
             v.pos -= v.speed;
             if (v.pos < -25) v.pos = 25;
             v.mesh.position.x = v.pos;
-          } else if (v.type === "metro") {
-            v.pos += v.speed;
-            if (v.pos > 25) v.pos = -25;
-            v.mesh.position.x = v.pos;
           }
         });
-
-        // Floating rings orbit
         rings.forEach(ring => {
           ring.userData.angle += ring.userData.speed;
           const a = ring.userData.angle;
@@ -343,24 +259,16 @@ function CityScene() {
           ring.rotation.x = t * 0.3;
           ring.rotation.y = t * 0.2;
         });
-
-        // Camera gentle sway
         camera.position.x = Math.sin(t * 0.1) * 2;
         camera.position.y = 14 + Math.sin(t * 0.07) * 1;
         camera.lookAt(0, 2, 0);
-
-        // City glow pulse
         cityGlow.intensity = 2.5 + Math.sin(t * 1.5) * 0.5;
         pinkGlow.intensity = 1.8 + Math.cos(t * 1.2) * 0.4;
-
-        // Stars twinkle
         stars.rotation.y = t * 0.005;
-
         renderer.render(scene, camera);
       }
       animate();
 
-      // Resize
       const onResize = () => {
         if (!mountRef.current) return;
         const w = mountRef.current.clientWidth;
@@ -374,14 +282,12 @@ function CityScene() {
     }
 
     init();
-
     return () => {
       cancelAnimationFrame(animId);
       if (renderer) {
         renderer.dispose();
-        if (mountRef.current && renderer.domElement.parentNode === mountRef.current) {
+        if (mountRef.current && renderer.domElement.parentNode === mountRef.current)
           mountRef.current.removeChild(renderer.domElement);
-        }
       }
     };
   }, []);
@@ -389,9 +295,45 @@ function CityScene() {
   return <div ref={mountRef} style={{ width: "100%", height: "100%" }} />;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Error message resolver
+//
+// KEY FIX: NextAuth with { redirect: false } returns res.error as a generic
+// "CredentialsSignin" string in production — it does NOT pass through the
+// actual thrown Error message for security reasons.
+//
+// To pass real error messages through, we must add them to NextAuth's
+// "error" query param via a custom error page, OR we handle them ourselves
+// by making a direct POST to our API route and then calling signIn only on
+// success. That's what handleSubmit does below.
+// ─────────────────────────────────────────────────────────────────────────────
+function resolveErrorMessage(error: string): { message: string; isGoogleAccount: boolean } {
+  const e = error.toLowerCase();
+
+  if (
+    e.includes("google_account_no_password") ||
+    e.includes("no password set") ||
+    e.includes("credentialssignin") // NextAuth generic — likely a Google-only account
+  ) {
+    return { message: "", isGoogleAccount: true };
+  }
+  if (e.includes("verify your email") || e.includes("email_verified")) {
+    return { message: "Please verify your email. Check your inbox for the OTP we sent.", isGoogleAccount: false };
+  }
+  if (e.includes("incorrect password") || e.includes("wrong password")) {
+    return { message: "Incorrect password. Please try again.", isGoogleAccount: false };
+  }
+  if (e.includes("no account") || e.includes("not found")) {
+    return { message: "No account found with this email.", isGoogleAccount: false };
+  }
+  return { message: error || "Something went wrong. Please try again.", isGoogleAccount: false };
+}
+
 // ── Login Page ────────────────────────────────────────────────
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
   const [showPw,   setShowPw]   = useState(false);
@@ -399,19 +341,65 @@ export default function LoginPage() {
   const [error,    setError]    = useState("");
   const [loading,  setLoading]  = useState(false);
 
+  // Pick up error passed via URL (e.g. from NextAuth redirect on Google failure)
+  useEffect(() => {
+    const urlError = searchParams.get("error");
+    if (urlError) setError(decodeURIComponent(urlError));
+  }, [searchParams]);
+
+  // ── KEY FIX: Two-step login ──────────────────────────────────────────────
+  // Step 1: Call our own API to validate credentials and get the REAL error.
+  //         This avoids NextAuth swallowing the error into "CredentialsSignin".
+  // Step 2: If valid, call signIn("credentials") which will now succeed.
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(""); setLoading(true);
-    const res = await signIn("credentials", { email, password, redirect: false });
-    setLoading(false);
-    if (res?.error) setError(res.error);
-    else router.replace("/");
+    setError("");
+    setLoading(true);
+
+    try {
+      // Step 1 — pre-validate against our own endpoint
+      const check = await fetch("/api/auth/check-credentials", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ email: email.toLowerCase(), password }),
+      });
+      const data = await check.json();
+
+      if (!check.ok) {
+        // Real error message from our API
+        setError(data.error ?? "Something went wrong.");
+        setLoading(false);
+        return;
+      }
+
+      // Step 2 — credentials are valid, let NextAuth create the session
+      const res = await signIn("credentials", {
+        email:    email.toLowerCase(),
+        password,
+        redirect: false,
+      });
+
+      if (res?.error) {
+        // Shouldn't happen after a successful pre-check, but handle gracefully
+        setError("Sign-in failed. Please try again.");
+      } else {
+        router.replace("/");
+      }
+    } catch {
+      setError("Network error. Please check your connection.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleGoogle() {
     setLoading(true);
     await signIn("google", { callbackUrl: "/" });
   }
+
+  const { message: errorMsg, isGoogleAccount } = error
+    ? resolveErrorMessage(error)
+    : { message: "", isGoogleAccount: false };
 
   return (
     <div style={{
@@ -441,43 +429,24 @@ export default function LoginPage() {
           boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
           display: "flex", minHeight: "700px",
         }}>
-
           {/* ── LEFT: 3D Scene ── */}
-          <div className="split-left" style={{
-            width: "46%", minWidth: "46%", maxWidth: "46%",
-            background: "#0a1628",
-            overflow: "hidden", position: "relative",
-          }}>
-            {/* 3D Canvas fills entire left panel */}
+          <div className="split-left" style={{ width: "46%", minWidth: "46%", maxWidth: "46%", background: "#0a1628", overflow: "hidden", position: "relative" }}>
             <div style={{ position: "absolute", inset: 0 }}>
               <CityScene />
             </div>
-
-            {/* Overlay text on top of 3D scene */}
             <div style={{
               position: "absolute", inset: 0,
               background: "linear-gradient(to bottom, rgba(10,22,40,0.7) 0%, transparent 35%, transparent 65%, rgba(10,22,40,0.85) 100%)",
               display: "flex", flexDirection: "column", justifyContent: "space-between",
-              padding: "36px",
-              pointerEvents: "none",
+              padding: "36px", pointerEvents: "none",
             }}>
-              {/* Logo */}
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                <div style={{
-                  width: "46px", height: "46px", borderRadius: "12px",
-                  background: "linear-gradient(135deg,#1565C0,#0d47a1)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: "22px", boxShadow: "0 4px 16px rgba(21,101,192,0.5)",
-                }}>🚌</div>
+                <div style={{ width: "46px", height: "46px", borderRadius: "12px", background: "linear-gradient(135deg,#1565C0,#0d47a1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px", boxShadow: "0 4px 16px rgba(21,101,192,0.5)" }}>🚌</div>
                 <div>
-                  <div style={{ fontSize: "21px", fontWeight: "800", color: "white", lineHeight: 1 }}>
-                    Smart<span style={{ color: "#60a5fa" }}>Commute</span>
-                  </div>
+                  <div style={{ fontSize: "21px", fontWeight: "800", color: "white", lineHeight: 1 }}>Smart<span style={{ color: "#60a5fa" }}>Commute</span></div>
                   <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.6)", marginTop: "2px" }}>All Routes. One Destination.</div>
                 </div>
               </div>
-
-              {/* Bottom text */}
               <div>
                 <div style={{ fontSize: "26px", fontWeight: "900", color: "white", lineHeight: 1.2, marginBottom: "10px" }}>
                   Every Route.<br />Every Ride.<br /><span style={{ color: "#60a5fa" }}>Every Day.</span>
@@ -485,8 +454,6 @@ export default function LoginPage() {
                 <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.65)", lineHeight: 1.7, maxWidth: "280px", margin: 0 }}>
                   Real-time routes for Metro, Bus, Bike & Car — all in one place. Hyderabad&apos;s smartest commute companion.
                 </p>
-
-                {/* Transport badges */}
                 <div style={{ display: "flex", gap: "8px", marginTop: "16px", flexWrap: "wrap" }}>
                   {[
                     { icon: "🚇", label: "Metro",  col: "#3b82f6" },
@@ -494,14 +461,7 @@ export default function LoginPage() {
                     { icon: "🛵", label: "Bike",   col: "#a855f7" },
                     { icon: "🚗", label: "Car",    col: "#f59e0b" },
                   ].map(m => (
-                    <div key={m.label} style={{
-                      display: "flex", alignItems: "center", gap: "5px",
-                      background: "rgba(255,255,255,0.12)",
-                      backdropFilter: "blur(8px)",
-                      border: `1px solid ${m.col}55`,
-                      borderRadius: "20px", padding: "5px 12px",
-                      fontSize: "12px", fontWeight: "700", color: "white",
-                    }}>
+                    <div key={m.label} style={{ display: "flex", alignItems: "center", gap: "5px", background: "rgba(255,255,255,0.12)", backdropFilter: "blur(8px)", border: `1px solid ${m.col}55`, borderRadius: "20px", padding: "5px 12px", fontSize: "12px", fontWeight: "700", color: "white" }}>
                       <span>{m.icon}</span> {m.label}
                     </div>
                   ))}
@@ -511,18 +471,12 @@ export default function LoginPage() {
           </div>
 
           {/* ── RIGHT: Login Form ── */}
-          <div className="split-right" style={{
-            width: "54%", minWidth: "54%", maxWidth: "54%",
-            background: "white", display: "flex", flexDirection: "column",
-            justifyContent: "center", alignItems: "center",
-            padding: "40px", overflowY: "auto",
-          }}>
+          <div className="split-right" style={{ width: "54%", minWidth: "54%", maxWidth: "54%", background: "white", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", padding: "40px", overflowY: "auto" }}>
             <div style={{ maxWidth: "460px", width: "100%" }}>
-
               <h1 style={{ fontSize: "32px", fontWeight: "900", color: "#0f172a", margin: "0 0 6px" }}>Welcome back</h1>
               <p style={{ fontSize: "14px", color: "#64748b", margin: "0 0 28px" }}>Sign in to continue your journey</p>
 
-              {/* Google */}
+              {/* Google button */}
               <button className="g-btn" onClick={handleGoogle} disabled={loading}
                 style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", padding: "13px", borderRadius: "12px", border: "1.5px solid #e2e8f0", background: "white", fontSize: "14px", fontWeight: "600", color: "#1a1a1a", cursor: "pointer", marginBottom: "22px", transition: "background .15s" }}>
                 <GoogleIcon /> Continue with Google
@@ -569,7 +523,25 @@ export default function LoginPage() {
                   </Link>
                 </div>
 
-                {error && <ErrorBox msg={error} />}
+                {/* ── Error display — handles all error types ── */}
+                {error && (
+                  isGoogleAccount ? (
+                    // Google account trying to use password — guide them
+                    <div style={{ background: "#FFF3E0", border: "1.5px solid #FFB74D", borderRadius: "10px", padding: "12px 16px", fontSize: "13px", color: "#E65100", lineHeight: "1.6" }}>
+                      <strong>⚠️ This email uses Google Sign-In.</strong><br />
+                      You haven&apos;t set a password yet.{" "}
+                      <Link href={`/auth/register?email=${encodeURIComponent(email)}&setPassword=true`}
+                        style={{ color: "#1565C0", fontWeight: "700", textDecoration: "underline" }}>
+                        Click here to set a password
+                      </Link>
+                      {" "}— then you can log in with Google or your password.
+                    </div>
+                  ) : (
+                    <div style={{ background: "#FEF2F2", border: "1px solid #fecaca", color: "#DC2626", borderRadius: "10px", padding: "10px 14px", fontSize: "13px" }}>
+                      ⚠️ {errorMsg}
+                    </div>
+                  )
+                )}
 
                 <button type="submit" disabled={loading} className="sign-btn"
                   style={{ width: "100%", padding: "14px", borderRadius: "12px", background: "#1565C0", color: "white", border: "none", fontSize: "15px", fontWeight: "700", cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", transition: "background .15s" }}>
@@ -600,13 +572,7 @@ export default function LoginPage() {
   );
 }
 
-function ErrorBox({ msg }: { msg: string }) {
-  return (
-    <div style={{ background: "#FEF2F2", border: "1px solid #fecaca", color: "#DC2626", borderRadius: "10px", padding: "10px 14px", fontSize: "13px" }}>
-      ⚠️ {msg}
-    </div>
-  );
-}
+// ── Helpers ───────────────────────────────────────────────────
 
 function Footer() {
   return (
