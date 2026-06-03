@@ -414,6 +414,7 @@ export default function Home() {
   }, []);
 
   const dataRef = useRef<RouteData | null>(null);
+  const navRouteRef = useRef<{ from: [number,number]; to: [number ,number]} | null>(null);
   const fromAC  = useAutocomplete(from);
   const toAC    = useAutocomplete(to);
 
@@ -454,8 +455,12 @@ export default function Home() {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const loc = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-        setUserLocation(loc); setLocationStatus("allowed"); setShowLocationPrompt(false);
-        try { const area = await reverseGeocode(loc.lat, loc.lon); if (area) { setFrom(area); fromCoordsSelected.current = loc; } } catch {}
+        // Store location for 📍 button use, but DO NOT auto-fill the search bar
+        setUserLocation(loc);
+        setLocationStatus("allowed");
+        setShowLocationPrompt(false);
+        // ✅ REMOVED: setFrom(area) and fromCoordsSelected.current = loc
+        // User must manually click the 📍 pin button to fill their location
       },
       (err) => {
         if (err.code === 1) { localStorage.setItem(LS_KEY, "denied"); setLocationStatus("denied"); }
@@ -464,19 +469,22 @@ export default function Home() {
       { enableHighAccuracy: true, timeout: 12000 }
     );
   }
-
   function doGetLocationSilent() {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const loc = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-        setUserLocation(loc); setLocationStatus("allowed");
-        try { const area = await reverseGeocode(loc.lat, loc.lon); if (area) { setFrom(area); fromCoordsSelected.current = loc; } } catch {}
+        // Store location for 📍 button use only — DO NOT auto-fill FROM field
+        setUserLocation(loc);
+        setLocationStatus("allowed");
+        // ✅ REMOVED: reverseGeocode + setFrom(area)
       },
       () => {},
       { enableHighAccuracy: false, timeout: 8000 }
     );
   }
+   
+ 
 
   function handlePromptAllow()     { localStorage.setItem(LS_KEY, "permanent"); doGetLocation(true); }
   function handlePromptAllowOnce() { localStorage.setItem(LS_KEY, "session");   doGetLocation(true); }
@@ -543,6 +551,10 @@ export default function Home() {
       );
       const d: RouteData = res.data;
       setData(d); dataRef.current = d; triggerDraw("default", d);
+      navRouteRef.current = {
+        from: [d.fromCoords.lat, d.fromCoords.lon],
+        to:   [d.toCoords.lat,   d.toCoords.lon  ],
+      };
     } catch { alert("Could not fetch route. Check your backend is running."); }
     finally  { setLoading(false); }
   };
@@ -577,15 +589,18 @@ export default function Home() {
     triggerDraw(subId);
   };
 
-  const handleStartNavigation = async (mode: string) => {
-    const d = dataRef.current; if (!d) return;
-    setNavLoading(true);
-    try {
-      const steps = await fetchNavigationSteps([d.fromCoords.lat, d.fromCoords.lon], [d.toCoords.lat, d.toCoords.lon]);
-      setNavSteps(steps); setNavMode(mode);
-    } catch { alert("Could not load navigation steps."); }
-    finally  { setNavLoading(false); }
-  };
+// REPLACE the existing handleStartNavigation with:
+const handleStartNavigation = async (mode: string) => {
+  const route = navRouteRef.current;
+  if (!route) return;
+  setNavLoading(true);
+  try {
+    const steps = await fetchNavigationSteps(route.from, route.to);
+    setNavSteps(steps);
+    setNavMode(mode);
+  } catch { alert("Could not load navigation steps."); }
+  finally  { setNavLoading(false); }
+};
 
   const fromCoords = data?.fromCoords ? ([data.fromCoords.lat, data.fromCoords.lon] as [number, number]) : null;
   const toCoords   = data?.toCoords   ? ([data.toCoords.lat,   data.toCoords.lon  ] as [number, number]) : null;
@@ -655,14 +670,14 @@ export default function Home() {
       )}
 
       {/* ── Self-drive nav ── */}
-      {navMode && navSteps.length > 0 && data && (
-        <Navigation steps={navSteps} from={from} to={to}
-          totalDistance={data.distance} totalTime={`${data.trafficDuration} min`}
-          mode={navMode}
-          fromCoords={[data.fromCoords.lat, data.fromCoords.lon]}
-          toCoords={[data.toCoords.lat, data.toCoords.lon]}
-          onClose={() => setNavMode(null)} />
-      )}
+      {navMode && navSteps.length > 0 && navRouteRef.current && (
+  <Navigation steps={navSteps} from={from} to={to}
+    totalDistance={data?.distance ?? ""} totalTime={`${data?.trafficDuration ?? 0} min`}
+    mode={navMode}
+    fromCoords={navRouteRef.current.from}
+    toCoords={navRouteRef.current.to}
+    onClose={() => setNavMode(null)} />
+)}
 
       {/* ── Location prompt ── */}
       {showLocationPrompt && (
