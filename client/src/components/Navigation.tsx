@@ -191,14 +191,15 @@ export default function Navigation({
       const el = mapContainerRef.current as any;
       if (el._leaflet_id) el._leaflet_id = null;
 
-      const map = L.map(mapContainerRef.current, {
+      const mapOptions = {
         center: fromCoords, zoom: 15,
         zoomControl: false, attributionControl: false,
         rotate: true,           // leaflet-rotate: enable rotation
         touchRotate: true,      // leaflet-rotate: two-finger twist gesture
         rotateControl: false,   // we add our own compass button
         bearing: 0,
-      });
+      } as any; // cast needed: leaflet-rotate adds options not in @types/leaflet
+      const map = L.map(mapContainerRef.current, mapOptions);
 
       L.tileLayer(
         "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
