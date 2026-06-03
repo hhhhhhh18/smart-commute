@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -30,7 +31,6 @@ const MODE_CONFIG: Record<string, { color: string; icon: string; label: string }
   default:   { color: "#1A73E8", icon: "🚗",  label: "Drive" },
 };
 
-// SVG arrow definitions: path + rotation angle
 const DIRECTION_ARROWS: Record<string, { path: string; rotate: number }> = {
   "straight":          { path: "M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z", rotate: 0   },
   "new name":          { path: "M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z", rotate: 0   },
@@ -73,7 +73,6 @@ function DirectionArrow({
   );
 }
 
-// Haversine distance in metres between two [lat,lon] points
 function distanceM(a: [number, number], b: [number, number]): number {
   const R    = 6371000;
   const dLat = ((b[0] - a[0]) * Math.PI) / 180;
@@ -86,7 +85,6 @@ function distanceM(a: [number, number], b: [number, number]): number {
   return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
-// Bearing in degrees (0 = North, 90 = East) from point a to point b
 function bearingDeg(a: [number, number], b: [number, number]): number {
   const lat1 = (a[0] * Math.PI) / 180;
   const lat2 = (b[0] * Math.PI) / 180;
@@ -96,7 +94,6 @@ function bearingDeg(a: [number, number], b: [number, number]): number {
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
-// Build the SVG HTML string for the directional arrow marker on the map
 function buildArrowMarkerHtml(color: string, bearing: number, vehicleIcon: string): string {
   return `
     <div style="
@@ -104,7 +101,6 @@ function buildArrowMarkerHtml(color: string, bearing: number, vehicleIcon: strin
       width:64px;height:64px;
       display:flex;align-items:center;justify-content:center;
     ">
-      <!-- pulsing accuracy ring -->
       <div style="
         position:absolute;
         width:64px;height:64px;
@@ -113,8 +109,6 @@ function buildArrowMarkerHtml(color: string, bearing: number, vehicleIcon: strin
         border:2px solid ${color}55;
         animation:navPulse 2s ease-in-out infinite;
       "></div>
-
-      <!-- vehicle icon circle (static, always upright) -->
       <div style="
         position:absolute;
         width:36px;height:36px;
@@ -126,8 +120,6 @@ function buildArrowMarkerHtml(color: string, bearing: number, vehicleIcon: strin
         font-size:18px;
         z-index:1;
       ">${vehicleIcon}</div>
-
-      <!-- directional arrow — rotates with bearing, sits on top -->
       <svg
         width="64" height="64"
         viewBox="0 0 64 64"
@@ -150,28 +142,45 @@ export default function Navigation({
   mode, fromCoords, toCoords, onClose,
 }: NavigationProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const lastKnownPosRef = useRef<[number, number] | null>(null);
   const mapRef          = useRef<any>(null);
   const layersRef       = useRef<any[]>([]);
-  const locationRef     = useRef<any>(null);
+  const markerRef       = useRef<any>(null);
+  const LRef            = useRef<any>(null);
+  const heartbeatRef    = useRef<any>(null);
   const watchIdRef      = useRef<number | null>(null);
   const initedRef       = useRef(false);
   const routeCoordsRef  = useRef<[number, number][]>([]);
-  const prevPosRef      = useRef<[number, number] | null>(null);  // for bearing calc
-  const bearingRef      = useRef<number>(bearingDeg(fromCoords, toCoords)); // initial bearing toward dest
-  const [mapBearing, setMapBearing] = useState(0); // tracks map rotation for compass button
-
+  const prevPosRef      = useRef<[number, number] | null>(null);
+  const bearingRef      = useRef<number>(bearingDeg(fromCoords, toCoords));
+  const [mapBearing, setMapBearing] = useState(0);
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
   const [showAllSteps,   setShowAllSteps]    = useState(false);
 
   const cfg         = MODE_CONFIG[mode] || MODE_CONFIG.default;
   const currentStep = steps[currentStepIdx] || steps[0];
 
-  // ── Build map once ────────────────────────────────────────────────────────
+  // ONE reusable place-marker function — always removes old, creates fresh
+  const placeMarker = (lat: number, lng: number, bearing: number = 0) => {
+    if (!mapRef.current || !LRef.current) return;
+    const L = LRef.current;
+    if (markerRef.current) {
+      markerRef.current.remove();
+      markerRef.current = null;
+    }
+    const icon = L.divIcon({
+      className: "",
+      html: buildArrowMarkerHtml(cfg.color, bearing, cfg.icon),
+      iconSize:   [64, 64],
+      iconAnchor: [32, 32],
+    });
+    markerRef.current = L.marker([lat, lng], { icon }).addTo(mapRef.current);
+  };
+
   useEffect(() => {
     if (initedRef.current || !mapContainerRef.current) return;
     initedRef.current = true;
 
-    // Load leaflet-rotate plugin (enables two-finger rotate on touch devices)
     const loadRotatePlugin = (): Promise<void> => new Promise((resolve) => {
       if ((window as any)._leafletRotateLoaded) { resolve(); return; }
       const css = document.createElement("link");
@@ -181,11 +190,14 @@ export default function Navigation({
       const script = document.createElement("script");
       script.src = "https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js";
       script.onload = () => { (window as any)._leafletRotateLoaded = true; resolve(); };
-      script.onerror = () => resolve(); // graceful fallback if CDN fails
+      script.onerror = () => resolve();
       document.head.appendChild(script);
     });
 
     import("leaflet").then(async (L) => {
+      // Store Leaflet instance ONCE — used by GPS callback synchronously
+      LRef.current = L;
+
       await loadRotatePlugin();
       if (!mapContainerRef.current || mapRef.current) return;
       const el = mapContainerRef.current as any;
@@ -194,11 +206,11 @@ export default function Navigation({
       const mapOptions = {
         center: fromCoords, zoom: 15,
         zoomControl: false, attributionControl: false,
-        rotate: true,           // leaflet-rotate: enable rotation
-        touchRotate: true,      // leaflet-rotate: two-finger twist gesture
-        rotateControl: false,   // we add our own compass button
+        rotate: true,
+        touchRotate: true,
+        rotateControl: false,
         bearing: 0,
-      } as any; // cast needed: leaflet-rotate adds options not in @types/leaflet
+      } as any;
       const map = L.map(mapContainerRef.current, mapOptions);
 
       L.tileLayer(
@@ -207,13 +219,11 @@ export default function Navigation({
       ).addTo(map);
       mapRef.current = map;
 
-      // Track map bearing so compass button appears when map is rotated
       map.on("rotate", () => {
         const b = (map as any).getBearing ? Math.round((map as any).getBearing()) : 0;
         setMapBearing(b);
       });
 
-      // Inject pulse keyframe once
       if (!document.getElementById("nav-arrow-style")) {
         const style = document.createElement("style");
         style.id = "nav-arrow-style";
@@ -227,7 +237,7 @@ export default function Navigation({
         document.head.appendChild(style);
       }
 
-      // ── Fetch & draw route ──────────────────────────────────────────────
+      // ── Fetch & draw route ────────────────────────────────────────────────
       fetch(
         `https://router.project-osrm.org/route/v1/driving/` +
         `${fromCoords[1]},${fromCoords[0]};${toCoords[1]},${toCoords[0]}` +
@@ -241,20 +251,11 @@ export default function Navigation({
 
           routeCoordsRef.current = latLngs;
 
-          // Refine initial bearing using actual first route segment (more accurate than straight-line)
           if (latLngs.length >= 2) {
-            // Use the 5th point or last available to get a stable initial direction
             const sampleIdx = Math.min(4, latLngs.length - 1);
-            const refinedBearing = bearingDeg(latLngs[0], latLngs[sampleIdx]);
-            bearingRef.current = refinedBearing;
-            // Update the already-placed arrow to point along the actual road
-            if (locationRef.current?._icon) {
-              const svg = locationRef.current._icon.querySelector("svg");
-              if (svg) svg.style.transform = `rotate(${refinedBearing}deg)`;
-            }
+            bearingRef.current = bearingDeg(latLngs[0], latLngs[sampleIdx]);
           }
 
-          // FROM label above start marker
           const fromLabelIcon = L.divIcon({
             className: "",
             html: `<div style="background:#34A853;color:white;font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;border:1.5px solid white;box-shadow:0 1px 6px rgba(0,0,0,0.25);white-space:nowrap;">🚦 ${from}</div>`,
@@ -268,7 +269,6 @@ export default function Navigation({
           }).addTo(map);
           layersRef.current.push(baseLine);
 
-          // Traffic simulation overlays
           const total = coords.length;
           const yS = Math.floor(total * 0.35), yE = Math.floor(total * 0.55);
           const rS = Math.floor(total * 0.72), rE = Math.floor(total * 0.82);
@@ -289,59 +289,35 @@ export default function Navigation({
           });
           layersRef.current.push(L.marker(toCoords, { icon: destIcon }).addTo(map));
 
+          // fitBounds ONLY — no setView timers after this
           map.fitBounds(baseLine.getBounds(), { padding: [80, 80] });
-          setTimeout(() => {
-            if (mapRef.current) {
-              mapRef.current.setView(fromCoords, 16, { animate: true, duration: 1.2 });
-            }
-          }, 1800);
+
+          // Place marker immediately — no delayed re-centering
+          const startPos = prevPosRef.current ?? fromCoords;
+          placeMarker(startPos[0], startPos[1], bearingRef.current);
         })
         .catch(console.error);
 
-      // Directional arrow marker at route start — points toward destination
-      const initialBearing = bearingRef.current;
-      const arrowIcon = L.divIcon({
-        className: "",
-        html: buildArrowMarkerHtml(cfg.color, initialBearing, cfg.icon),
-        iconAnchor: [32, 32],
-        iconSize: [64, 64],
-      });
-      locationRef.current = L.marker(fromCoords, { icon: arrowIcon }).addTo(map);
-
-      // ── GPS tracking ─────────────────────────────────────────────────────
+      // ── GPS tracking — NO await/import inside callback ────────────────────
       if (navigator.geolocation) {
         const id = navigator.geolocation.watchPosition(
           (pos) => {
             const newPos: [number, number] = [pos.coords.latitude, pos.coords.longitude];
-
-            // Calculate new bearing from movement or from GPS heading
+            lastKnownPosRef.current = newPos;
             let newBearing = bearingRef.current;
             if (pos.coords.heading != null && !isNaN(pos.coords.heading)) {
-              // Use GPS heading if available (most accurate)
               newBearing = pos.coords.heading;
             } else if (prevPosRef.current) {
-              // Fallback: compute bearing from previous → current position
               const moved = distanceM(prevPosRef.current, newPos);
-              if (moved > 5) { // only update if moved >5m to avoid jitter
+              if (moved > 5) {
                 newBearing = bearingDeg(prevPosRef.current, newPos);
               }
             }
             bearingRef.current = newBearing;
             prevPosRef.current = newPos;
 
-            // Update marker position AND re-render arrow with new bearing
-            if (locationRef.current) {
-              locationRef.current.setLatLng(newPos);
-              // Update the icon HTML to rotate to new bearing
-              const L2 = (window as any).L || locationRef.current._map?._leaflet_events;
-              if (locationRef.current._icon) {
-                // Directly update the SVG transform inside the existing icon
-                const svg = locationRef.current._icon.querySelector("svg");
-                if (svg) {
-                  svg.style.transform = `rotate(${newBearing}deg)`;
-                }
-              }
-            }
+            // Only placeMarker — no setLatLng, no _map checks
+            placeMarker(newPos[0], newPos[1], newBearing);
 
             if (routeCoordsRef.current.length > 0 && steps.length > 1) {
               setCurrentStepIdx(prev => {
@@ -359,13 +335,47 @@ export default function Navigation({
         );
         watchIdRef.current = id;
       }
-    });
 
+      // ── Permanent safety heartbeat ────────────────────────────────────────
+      heartbeatRef.current = setInterval(() => {
+
+        // no map yet
+        if (!mapRef.current || !lastKnownPosRef.current) return;
+      
+        const markerMissing =
+          !markerRef.current ||
+          !markerRef.current._map ||
+          !mapRef.current.hasLayer(markerRef.current);
+      
+        if (markerMissing) {
+      
+          const [lat, lng] = lastKnownPosRef.current;
+      
+          placeMarker(
+            lat,
+            lng,
+            bearingRef.current
+          );
+      
+          console.log("Marker restored");
+        }
+      
+      }, 3000);
+
+    }); // ← closes import("leaflet").then(async (L) => {
+
+    // ── Cleanup ───────────────────────────────────────────────────────────
     return () => {
+      if (heartbeatRef.current) {
+        clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
+      }
+      lastKnownPosRef.current = null;
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
+      
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
@@ -385,7 +395,6 @@ export default function Navigation({
       <div style={{ position:"absolute", top:0, left:0, right:0, zIndex:10, background:cfg.color, padding:"44px 20px 16px", display:"flex", alignItems:"center", gap:"14px", boxShadow:"0 4px 20px rgba(0,0,0,0.3)" }}>
         <button onClick={onClose} style={{ position:"absolute", top:"12px", left:"16px", background:"rgba(0,0,0,0.25)", border:"none", color:"white", borderRadius:"50%", width:"36px", height:"36px", cursor:"pointer", fontSize:"18px", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:"700" }}>←</button>
 
-        {/* Direction arrow box — SVG arrow, not emoji */}
         <div style={{ width:"54px", height:"54px", background:"rgba(0,0,0,0.2)", borderRadius:"14px", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
           <DirectionArrow direction={currentStep?.direction || "default"} size={32} color="white" />
         </div>
@@ -424,7 +433,6 @@ export default function Navigation({
             </div>
           ))}
         </div>
-        {/* Compass — rotates to show current map bearing; tap to snap back to north */}
         {mapBearing !== 0 && (
           <button
             onClick={() => { if ((mapRef.current as any)?.setBearing) { (mapRef.current as any).setBearing(0); setMapBearing(0); } }}
