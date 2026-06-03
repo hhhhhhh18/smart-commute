@@ -209,7 +209,7 @@ export default function Navigation({
 
       // Track map bearing so compass button appears when map is rotated
       map.on("rotate", () => {
-        const b = map.getBearing ? Math.round(map.getBearing()) : 0;
+        const b = (map as any).getBearing ? Math.round((map as any).getBearing()) : 0;
         setMapBearing(b);
       });
 
@@ -427,7 +427,7 @@ export default function Navigation({
         {/* Compass — rotates to show current map bearing; tap to snap back to north */}
         {mapBearing !== 0 && (
           <button
-            onClick={() => { if (mapRef.current?.setBearing) { mapRef.current.setBearing(0); setMapBearing(0); } }}
+            onClick={() => { if ((mapRef.current as any)?.setBearing) { (mapRef.current as any).setBearing(0); setMapBearing(0); } }}
             title="Reset to North"
             style={{ background:"white", border:"none", borderRadius:"8px", width:"36px", height:"36px", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 2px 8px rgba(0,0,0,0.2)", cursor:"pointer", padding:0 }}
           >
