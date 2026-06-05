@@ -3,7 +3,7 @@ import nodemailer from "nodemailer";
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, email, suggestion } = await req.json();
+    const { name, email, suggestion, rating } = await req.json();
 
     // Only the suggestion text is required
     if (!suggestion?.trim()) {
@@ -49,6 +49,14 @@ export async function POST(req: NextRequest) {
               <td style="padding:10px 0;font-size:13px;color:#64748b;font-weight:600">Date</td>
               <td style="padding:10px 0;font-size:14px;color:#1a1a1a">${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</td>
             </tr>
+            <tr>
+  <td style="padding:10px 0;font-size:13px;color:#64748b;font-weight:600">
+    Rating
+  </td>
+  <td style="padding:10px 0;font-size:14px;color:#1a1a1a;font-weight:700">
+    ${rating ? `${"⭐".repeat(rating)} (${rating}/5)` : "Not Provided"}
+  </td>
+</tr>
           </table>
 
           <div style="background:white;border:1px solid #e2e8f0;border-radius:10px;padding:20px;margin-bottom:20px">
@@ -64,7 +72,10 @@ export async function POST(req: NextRequest) {
     });
 
     // ── Confirmation email to user (only if they provided an email) ───────────
-    if (email?.trim()) {
+    if (
+      email?.trim() &&
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+    ) {
       await transporter.sendMail({
         from:    `"SmartCommute" <${process.env.SMTP_USER}>`,
         to:      email.trim(),

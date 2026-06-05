@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -299,15 +300,50 @@ function LocationPrompt({ onAllow, onAllowOnce, onDeny }: { onAllow: () => void;
   );
 }
 
-// ── Pure splash UI, no hooks ────────────────────────────────────────────────
+// ── Star Rating component ─────────────────────────────────────────────────────
+function StarRating({ value, hovered, onRate, onHover, onLeave }: {
+  value: number; hovered: number;
+  onRate: (n: number) => void;
+  onHover: (n: number) => void;
+  onLeave: () => void;
+}) {
+  const labels = ["", "Poor", "Fair", "Good", "Very Good", "Excellent"];
+  const active  = hovered > 0 ? hovered : value;
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:"6px" }}>
+      {[1,2,3,4,5].map(n => (
+        <button
+          key={n}
+          type="button"
+          onClick={() => onRate(n)}
+          onMouseEnter={() => onHover(n)}
+          onMouseLeave={onLeave}
+          style={{
+            background:"none", border:"none", cursor:"pointer", padding:"2px",
+            fontSize: "28px",
+            transform: "none",
+            transition: "filter 0.12s",
+            filter: n <= active ? "none" : "grayscale(1) opacity(0.35)",
+            lineHeight: 1,
+          }}
+          aria-label={`Rate ${n} star${n > 1 ? "s" : ""}`}
+        >
+          ★
+        </button>
+      ))}
+      {active > 0 && (
+        <span style={{ fontSize:"12px", color:"#f59e0b", fontWeight:"700", marginLeft:"4px" }}>
+          {labels[active]}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ── Splash screen ─────────────────────────────────────────────────────────────
 function SplashScreen() {
   return (
-    <div style={{
-      position:"fixed", inset:0, zIndex:9999,
-      background:"linear-gradient(135deg,#0d1b3e 0%,#1565C0 60%,#0a2a6e 100%)",
-      display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-      fontFamily:"'Segoe UI',sans-serif", overflow:"hidden",
-    }}>
+    <div style={{ position:"fixed", inset:0, zIndex:9999, background:"linear-gradient(135deg,#0d1b3e 0%,#1565C0 60%,#0a2a6e 100%)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", fontFamily:"'Segoe UI',sans-serif", overflow:"hidden" }}>
       <style>{`
         @keyframes splashBus  { 0%{transform:translateX(-90px);opacity:0} 15%{opacity:1} 85%{opacity:1} 100%{transform:translateX(90px);opacity:0} }
         @keyframes splashRing { 0%,100%{transform:scale(1);opacity:.12} 50%{transform:scale(1.2);opacity:.28} }
@@ -325,68 +361,27 @@ function SplashScreen() {
         .spl-dot:nth-child(3){animation-delay:.4s}
         .spl-bar{height:3px;border-radius:3px;background:linear-gradient(to right,#64b5f6,#fff);animation:splashBar 4s linear forwards;}
       `}</style>
-
-      {/* Rings */}
-      <div className="spl-ring spl-ring-1" />
-      <div className="spl-ring spl-ring-2" />
-      <div className="spl-ring spl-ring-3" />
-
-      {/* City skyline */}
-      <div style={{ position:"absolute", bottom:0, left:0, right:0, height:"88px",
-        background:"linear-gradient(to top,#0a1628 55%,transparent)",
-        display:"flex", alignItems:"flex-end", justifyContent:"center", gap:"5px", overflow:"hidden" }}>
-        {[36,52,42,68,48,62,40,56,46,60,38,50].map((h,i) => (
-          <div key={i} style={{ width:"20px", height:`${h}px`, flexShrink:0,
-            background:i%3===0?"#1a3a6e":i%3===1?"#162d5a":"#1e3f7a",
-            borderRadius:"3px 3px 0 0" }} />
-        ))}
+      <div className="spl-ring spl-ring-1" /><div className="spl-ring spl-ring-2" /><div className="spl-ring spl-ring-3" />
+      <div style={{ position:"absolute", bottom:0, left:0, right:0, height:"88px", background:"linear-gradient(to top,#0a1628 55%,transparent)", display:"flex", alignItems:"flex-end", justifyContent:"center", gap:"5px", overflow:"hidden" }}>
+        {[36,52,42,68,48,62,40,56,46,60,38,50].map((h,i) => (<div key={i} style={{ width:"20px", height:`${h}px`, flexShrink:0, background:i%3===0?"#1a3a6e":i%3===1?"#162d5a":"#1e3f7a", borderRadius:"3px 3px 0 0" }} />))}
       </div>
-
-      {/* Metro line */}
-      <div style={{ position:"absolute", bottom:"90px", left:0, right:0, height:"3px",
-        background:"linear-gradient(to right,transparent,#e53935 20%,#e53935 80%,transparent)", opacity:.55 }} />
-
-      {/* Moving bus */}
+      <div style={{ position:"absolute", bottom:"90px", left:0, right:0, height:"3px", background:"linear-gradient(to right,transparent,#e53935 20%,#e53935 80%,transparent)", opacity:.55 }} />
       <div className="spl-bus">🚌</div>
-
-      {/* Main branding */}
       <div className="spl-up" style={{ textAlign:"center", zIndex:1, padding:"0 28px" }}>
         <div style={{ fontSize:"62px", marginBottom:"10px", filter:"drop-shadow(0 4px 12px rgba(0,0,0,.4))" }}>🚗</div>
-        <div style={{ fontSize:"30px", fontWeight:"800", color:"#fff", letterSpacing:"-0.5px", marginBottom:"6px" }}>
-          Smart Commute
-        </div>
-        <div style={{ display:"inline-block", fontSize:"11px", fontWeight:"700",
-          background:"rgba(255,255,255,.12)", color:"#90caf9",
-          padding:"3px 12px", borderRadius:"999px", marginBottom:"14px",
-          border:"1px solid rgba(255,255,255,.2)", letterSpacing:"1px", textTransform:"uppercase" }}>
-          Hyderabad
-        </div>
-        <div style={{ fontSize:"15px", color:"rgba(255,255,255,.72)", fontWeight:"400", lineHeight:"1.5" }}>
-          All Routes. One Destination.
-        </div>
-
-        {/* Mode pills */}
+        <div style={{ fontSize:"30px", fontWeight:"800", color:"#fff", letterSpacing:"-0.5px", marginBottom:"6px" }}>Smart Commute</div>
+        <div style={{ display:"inline-block", fontSize:"11px", fontWeight:"700", background:"rgba(255,255,255,.12)", color:"#90caf9", padding:"3px 12px", borderRadius:"999px", marginBottom:"14px", border:"1px solid rgba(255,255,255,.2)", letterSpacing:"1px", textTransform:"uppercase" }}>Hyderabad</div>
+        <div style={{ fontSize:"15px", color:"rgba(255,255,255,.72)", fontWeight:"400", lineHeight:"1.5" }}>All Routes. One Destination.</div>
         <div style={{ display:"flex", gap:"8px", justifyContent:"center", marginTop:"22px", flexWrap:"wrap" }}>
           {[["🚇","Metro"],["🚌","Bus"],["🏍️","Bike"],["🚗","Car"]].map(([ic,lb]) => (
-            <div key={lb} style={{ display:"flex", alignItems:"center", gap:"5px",
-              background:"rgba(255,255,255,.10)", border:"1px solid rgba(255,255,255,.18)",
-              borderRadius:"999px", padding:"5px 12px", fontSize:"12px", color:"#fff", fontWeight:"600" }}>
-              <span>{ic}</span><span>{lb}</span>
-            </div>
+            <div key={lb} style={{ display:"flex", alignItems:"center", gap:"5px", background:"rgba(255,255,255,.10)", border:"1px solid rgba(255,255,255,.18)", borderRadius:"999px", padding:"5px 12px", fontSize:"12px", color:"#fff", fontWeight:"600" }}><span>{ic}</span><span>{lb}</span></div>
           ))}
         </div>
-
-        {/* Progress bar — 4 s matches the redirect timer */}
-        <div style={{ marginTop:"36px", width:"180px", height:"3px",
-          background:"rgba(255,255,255,.15)", borderRadius:"3px", overflow:"hidden", margin:"36px auto 0" }}>
+        <div style={{ marginTop:"36px", width:"180px", height:"3px", background:"rgba(255,255,255,.15)", borderRadius:"3px", overflow:"hidden", margin:"36px auto 0" }}>
           <div className="spl-bar" />
         </div>
-
-        {/* Loading dots */}
         <div style={{ marginTop:"14px", fontSize:"18px", color:"rgba(255,255,255,.5)" }}>
-          <span className="spl-dot">●</span>
-          <span className="spl-dot"> ●</span>
-          <span className="spl-dot"> ●</span>
+          <span className="spl-dot">●</span><span className="spl-dot"> ●</span><span className="spl-dot"> ●</span>
         </div>
       </div>
     </div>
@@ -394,9 +389,7 @@ function SplashScreen() {
 }
 
 export default function Home() {
-  // ── ALL STATE (hooks always before any conditional return) ────────────────
   const [splashDone, setSplashDone] = useState(false);
-
   const [from, setFrom] = useState("");
   const [to, setTo]     = useState("");
   const fromCoordsSelected = useRef<{ lat: number; lon: number } | null>(null);
@@ -424,34 +417,31 @@ export default function Home() {
   const [showFromDropdown, setShowFromDropdown] = useState(false);
   const [showToDropdown,   setShowToDropdown]   = useState(false);
   const [rideTicket, setRideTicket] = useState<RideTicketState | null>(null);
+
+  // ── Suggestion + Rating state ─────────────────────────────────────────────
   const [suggestionName,    setSuggestionName]    = useState("");
   const [suggestionEmail,   setSuggestionEmail]   = useState("");
   const [suggestionText,    setSuggestionText]    = useState("");
   const [sendingSuggestion, setSendingSuggestion] = useState(false);
   const [suggestionSuccess, setSuggestionSuccess] = useState("");
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [starRating,        setStarRating]        = useState(0);
+  const [starHovered,       setStarHovered]       = useState(0);
+  // ── NEW: rating-only submit state ─────────────────────────────────────────
+  const [ratingSubmitted,  setRatingSubmitted]  = useState(false);
+  const [submittingRating, setSubmittingRating] = useState(false);
 
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const { data: session, status } = useSession();
   const router = useRouter();
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const dataRef        = useRef<RouteData | null>(null);
   const navRouteRef    = useRef<{ from: [number,number]; to: [number,number] } | null>(null);
-
   const fromAC = useAutocomplete(from);
   const toAC   = useAutocomplete(to);
 
-  // ── SPLASH FIX: show 4-second splash only on first visit per browser session.
-  //    sessionStorage is cleared when the tab/browser closes, so new sessions
-  //    always get the splash. Within the same session (e.g. after login),
-  //    the splash is skipped immediately so the user lands on the app.
   useEffect(() => {
     const alreadySeen = sessionStorage.getItem("splashSeen");
-    if (alreadySeen) {
-      // Already shown this session (e.g. user just logged in) — skip splash
-      setSplashDone(true);
-      return;
-    }
-    // First time this session — show splash for 4s then redirect to login
+    if (alreadySeen) { setSplashDone(true); return; }
     const t = setTimeout(() => {
       sessionStorage.setItem("splashSeen", "1");
       setSplashDone(true);
@@ -460,7 +450,6 @@ export default function Home() {
     return () => clearTimeout(t);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Home page effects — only run after splash + when authenticated ────────
   useEffect(() => {
     if (!splashDone || status !== "authenticated") return;
     function handleClickOutside(e: MouseEvent) {
@@ -498,31 +487,15 @@ export default function Home() {
     setRouteConfig({ drawKey:Math.random(), activeMode:mode, trafficLevel:d.trafficLevel, busStops:d.busInfo?.stopsList??[], metroInfo:d.metroInfo??null, allRoutes:d.allRoutes??[], fromCoords:d.fromCoords?[d.fromCoords.lat,d.fromCoords.lon]:null, toCoords:d.toCoords?[d.toCoords.lat,d.toCoords.lon]:null });
   }, []);
 
-  // ── CONDITIONAL RENDER — after ALL hooks ─────────────────────────────────
-  // Show splash while the 4-second timer is running (first visit only)
   if (!splashDone) return <SplashScreen />;
-
-  // Auth loading — brief spinner while NextAuth resolves session
   if (status === "loading") return <SplashScreen />;
+  if (status === "unauthenticated") { router.push("/auth/login"); return null; }
 
-  // Not authenticated — redirect to login without showing splash again
-  if (status === "unauthenticated") {
-    router.push("/auth/login");
-    return null;
-  }
-
-  // ── Helper functions (not hooks) ──────────────────────────────────────────
   function doGetLocation() {
     if (!navigator.geolocation) { setLocationStatus("denied"); return; }
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const loc = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-        setUserLocation(loc); setLocationStatus("allowed"); setShowLocationPrompt(false);
-      },
-      (err) => {
-        if (err.code === 1) { localStorage.setItem(LS_KEY, "denied"); setLocationStatus("denied"); }
-        else { setShowLocationPrompt(false); setLocationStatus("denied"); }
-      },
+      (pos) => { const loc = { lat: pos.coords.latitude, lon: pos.coords.longitude }; setUserLocation(loc); setLocationStatus("allowed"); setShowLocationPrompt(false); },
+      (err) => { if (err.code === 1) { localStorage.setItem(LS_KEY, "denied"); setLocationStatus("denied"); } else { setShowLocationPrompt(false); setLocationStatus("denied"); } },
       { enableHighAccuracy: true, timeout: 12000 }
     );
   }
@@ -530,8 +503,7 @@ export default function Home() {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => { setUserLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude }); setLocationStatus("allowed"); },
-      () => {},
-      { enableHighAccuracy: false, timeout: 8000 }
+      () => {}, { enableHighAccuracy: false, timeout: 8000 }
     );
   }
   function handlePromptAllow()     { localStorage.setItem(LS_KEY, "permanent"); doGetLocation(); }
@@ -543,18 +515,57 @@ export default function Home() {
     }
     localStorage.removeItem(LS_KEY); setShowLocationPrompt(true);
   }
+
+  // ── NEW: Submit star rating only (no suggestion text required) ────────────
+  async function submitRatingOnly() {
+    if (starRating === 0) { alert("Please select a star rating first."); return; }
+    setSubmittingRating(true);
+    try {
+      const res = await fetch("/api/suggestions", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name:       suggestionName.trim() || "Anonymous",
+          email:      suggestionEmail.trim() || " ",
+          suggestion: "(Rating only — no written suggestion)",
+          rating:     starRating,
+        }),
+      });
+      if (res.ok) {
+        setRatingSubmitted(true);
+        setTimeout(() => setRatingSubmitted(false), 4000);
+      } else {
+        alert("Failed to submit rating. Please try again.");
+      }
+    } catch { alert("Something went wrong. Please try again."); }
+    finally  { setSubmittingRating(false); }
+  }
+
+  // ── Send full suggestion (includes star rating if set) ────────────────────
   async function sendSuggestion() {
     if (!suggestionText.trim()) { alert("Please enter a suggestion."); return; }
     setSendingSuggestion(true); setSuggestionSuccess("");
     try {
-      const res = await fetch("/api/suggestions", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ name:suggestionName.trim()||"Anonymous", email:suggestionEmail.trim()||"Not provided", suggestion:suggestionText.trim() }) });
+      const res = await fetch("/api/suggestions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name:       suggestionName.trim() || "Anonymous",
+          email:      suggestionEmail.trim() || "Not provided",
+          suggestion: suggestionText.trim(),
+          rating:     starRating > 0 ? starRating : null,
+        }),
+      });
       const result = await res.json();
       if (!res.ok) { alert(result.error || "Failed to send suggestion."); return; }
       setSuggestionSuccess("✅ Suggestion sent! Thank you for helping improve Smart Commute.");
       setSuggestionName(""); setSuggestionEmail(""); setSuggestionText("");
+      setStarRating(0); setStarHovered(0);
+      setRatingSubmitted(false);
     } catch { alert("Something went wrong. Please try again."); }
     finally  { setSendingSuggestion(false); }
   }
+
   const fetchRoutes = async () => {
     if (!from || !to) return;
     setLoading(true); setRouteConfig(EMPTY_CONFIG); setSelectedRouteIdx(0);
@@ -570,6 +581,7 @@ export default function Home() {
     } catch { alert("Could not fetch route. Check your backend is running."); }
     finally  { setLoading(false); }
   };
+
   const handleSaveRoute = async () => {
     const d = dataRef.current; if (!d) return;
     setSavingRoute(true);
@@ -579,6 +591,7 @@ export default function Home() {
     } catch {}
     setSavingRoute(false);
   };
+
   const handleCardClick = (mode: string) => {
     if (SUB_OPTIONS[mode]) { setModal(mode); return; }
     if (mode === "bus")   { triggerDraw("bus"); setShowBusNav(true); return; }
@@ -626,6 +639,9 @@ export default function Home() {
         @media (max-width:380px) { .sc-profile-name{display:none!important} .sc-profile-chevron{display:none!important} }
         .sc-suggestion-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; }
         @media (max-width:480px) { .sc-suggestion-grid{grid-template-columns:1fr} }
+        .rating-submit-btn { transition: background 0.2s, transform 0.1s; }
+        .rating-submit-btn:hover:not(:disabled) { transform: scale(1.03); }
+        .rating-submit-btn:active:not(:disabled) { transform: scale(0.97); }
       `}</style>
 
       {rideTicket && data && (
@@ -653,9 +669,7 @@ export default function Home() {
             <div style={{ fontSize:"48px", marginBottom:"12px" }}>🚇</div>
             <div style={{ fontSize:"17px", fontWeight:"700", color:"#1a1a1a", marginBottom:"8px" }}>Metro Not Available</div>
             <div style={{ fontSize:"13px", color:"#666", lineHeight:"1.6", marginBottom:"8px" }}>No metro route between</div>
-            <div style={{ background:"#f5f5f5", borderRadius:"10px", padding:"10px 14px", marginBottom:"18px", fontSize:"13px", color:"#1a1a1a", fontWeight:"600" }}>
-              📍 {from.split(",")[0]} → {to.split(",")[0]}
-            </div>
+            <div style={{ background:"#f5f5f5", borderRadius:"10px", padding:"10px 14px", marginBottom:"18px", fontSize:"13px", color:"#1a1a1a", fontWeight:"600" }}>📍 {from.split(",")[0]} → {to.split(",")[0]}</div>
             <div style={{ fontSize:"12px", color:"#888", lineHeight:"1.6", marginBottom:"20px" }}>The Hyderabad Metro doesn't cover this route. Try Bus, Bike, or Car.</div>
             <div style={{ display:"flex", gap:"10px" }}>
               <button onClick={() => { setShowMetroUnavailable(false); handleCardClick("bus"); }} style={{ flex:1, padding:"12px", background:"#1565C0", color:"white", border:"none", borderRadius:"12px", fontSize:"14px", fontWeight:"700", cursor:"pointer" }}>🚌 Try Bus</button>
@@ -698,6 +712,7 @@ export default function Home() {
         </div>
       )}
 
+      {/* ── HEADER ── */}
       <div className="sc-header">
         <div className="sc-header-brand">
           <span style={{ fontSize:"20px" }}>🚗</span>
@@ -708,8 +723,7 @@ export default function Home() {
           {locationStatus === "allowed" ? (
             <span style={{ fontSize:"11px", color:"#34A853", fontWeight:"600" }}>📍 On</span>
           ) : (
-            <button className="sc-loc-btn" onClick={handleEnableLocation}
-              style={{ color: locationStatus === "denied" ? "#EA4335" : "#1565C0" }}>
+            <button className="sc-loc-btn" onClick={handleEnableLocation} style={{ color: locationStatus === "denied" ? "#EA4335" : "#1565C0" }}>
               📍 {locationStatus === "denied" ? "Enable" : "Location"}
             </button>
           )}
@@ -755,7 +769,10 @@ export default function Home() {
         </div>
       </div>
 
+      {/* ── MAIN CONTENT ── */}
       <div style={{ maxWidth:"860px", margin:"0 auto", padding:"14px 12px 24px" }}>
+
+        {/* Search card */}
         <div style={{ background:"#fff", borderRadius:"16px", padding:"14px", boxShadow:"0 2px 10px rgba(0,0,0,0.07)", marginBottom:"12px" }}>
           <div className="sc-search-grid">
             <div style={{ position:"relative" }}>
@@ -802,6 +819,7 @@ export default function Home() {
           </button>
         </div>
 
+        {/* Map */}
         <div className="sc-map-wrap">
           <Map fromCoords={fromCoords} toCoords={toCoords} routeConfig={routeConfig}
             selectedRouteIdx={selectedRouteIdx}
@@ -942,16 +960,77 @@ export default function Home() {
           </>
         )}
 
+        {/* ── SUGGESTIONS & FEEDBACK ── */}
         <div style={{ background:"#fff", borderRadius:"16px", padding:"20px", marginTop:"28px", boxShadow:"0 2px 10px rgba(0,0,0,0.07)" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"4px" }}>
             <span style={{ fontSize:"20px" }}>💡</span>
             <div style={{ fontSize:"15px", fontWeight:"700", color:"#1a1a1a" }}>Suggestions & Feedback</div>
           </div>
           <div style={{ fontSize:"12px", color:"#888", marginBottom:"16px" }}>Help us improve Smart Commute.</div>
+
+          {/* ── Star rating card ── */}
+          <div style={{ background:"#fffbeb", border:"1.5px solid #fde68a", borderRadius:"12px", padding:"14px 16px", marginBottom:"16px" }}>
+            <div style={{ fontSize:"12px", fontWeight:"700", color:"#92400e", marginBottom:"10px", textTransform:"uppercase", letterSpacing:"0.5px" }}>
+              Rate your experience
+            </div>
+
+            {/* Stars row + Submit Rating button */}
+            <div style={{ display:"flex", alignItems:"center", gap:"10px", flexWrap:"wrap" }}>
+              <StarRating
+                value={starRating}
+                hovered={starHovered}
+                onRate={(n) => { setStarRating(prev => prev === n ? 0 : n); setRatingSubmitted(false); }}
+                onHover={setStarHovered}
+                onLeave={() => setStarHovered(0)}
+              />
+              {/* Submit Rating button — visible only when a star is selected */}
+              {starRating > 0 && (
+                <button
+                  className="rating-submit-btn"
+                  onClick={submitRatingOnly}
+                  disabled={submittingRating || ratingSubmitted}
+                  style={{
+                    padding: "8px 18px",
+                    background: ratingSubmitted ? "#22c55e" : "#f59e0b",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "999px",
+                    fontSize: "13px",
+                    fontWeight: "700",
+                    cursor: submittingRating || ratingSubmitted ? "default" : "pointer",
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
+                    boxShadow: ratingSubmitted ? "0 2px 8px rgba(34,197,94,0.35)" : "0 2px 8px rgba(245,158,11,0.35)",
+                  }}
+                >
+                  {ratingSubmitted ? "✅ Submitted!" : submittingRating ? "Sending…" : "Submit Rating"}
+                </button>
+              )}
+            </div>
+
+            {/* Helper text */}
+            {starRating === 0 && starHovered === 0 && (
+              <div style={{ fontSize:"11px", color:"#b45309", marginTop:"8px" }}>
+                Tap a star to rate — or fill in the form below to send a suggestion too
+              </div>
+            )}
+            {starRating > 0 && !ratingSubmitted && !submittingRating && (
+              <div style={{ fontSize:"11px", color:"#92400e", marginTop:"8px" }}>
+                Hit <strong>Submit Rating</strong> to send just your stars, or fill the form below to add a message
+              </div>
+            )}
+            {ratingSubmitted && (
+              <div style={{ fontSize:"12px", color:"#16a34a", fontWeight:"600", marginTop:"8px" }}>
+                ⭐ Thanks for your {starRating}-star rating! Your feedback has been sent.
+              </div>
+            )}
+          </div>
+
+          {/* Name + Email */}
           <div className="sc-suggestion-grid">
             <div>
               <label style={{ fontSize:"10px", fontWeight:"700", color:"#999", display:"block", marginBottom:"5px", textTransform:"uppercase" }}>Your Name</label>
-              <input value={suggestionName} onChange={(e) => setSuggestionName(e.target.value)} placeholder="e.g. John"
+              <input value={suggestionName} onChange={(e) => setSuggestionName(e.target.value)} placeholder="e.g. Rahul"
                 style={{ width:"100%", border:"1.5px solid #e8e8e8", borderRadius:"10px", padding:"10px 12px", fontSize:"13px", outline:"none", boxSizing:"border-box", color:"#1a1a1a" }} />
             </div>
             <div>
@@ -960,21 +1039,28 @@ export default function Home() {
                 style={{ width:"100%", border:"1.5px solid #e8e8e8", borderRadius:"10px", padding:"10px 12px", fontSize:"13px", outline:"none", boxSizing:"border-box", color:"#1a1a1a" }} />
             </div>
           </div>
+
+          {/* Message */}
           <div style={{ marginBottom:"12px" }}>
-            <label style={{ fontSize:"10px", fontWeight:"700", color:"#999", display:"block", marginBottom:"5px", textTransform:"uppercase" }}>Your Suggestion *</label>
+            <label style={{ fontSize:"10px", fontWeight:"700", color:"#999", display:"block", marginBottom:"5px", textTransform:"uppercase" }}>Your Suggestion <span style={{ color:"#ccc", fontWeight:"400" }}>(optional if you already rated)</span></label>
             <textarea value={suggestionText} onChange={(e) => setSuggestionText(e.target.value)}
               placeholder="Suggest a feature or report an issue…" rows={3}
               style={{ width:"100%", border:"1.5px solid #e8e8e8", borderRadius:"10px", padding:"10px 12px", fontSize:"13px", outline:"none", resize:"vertical", boxSizing:"border-box", color:"#1a1a1a", fontFamily:"'Segoe UI',sans-serif" }} />
           </div>
+
           {suggestionSuccess && (
-            <div style={{ background:"#e8f5e9", border:"1px solid #a5d6a7", borderRadius:"10px", padding:"10px 14px", marginBottom:"12px", fontSize:"13px", color:"#2e7d32", fontWeight:"600" }}>{suggestionSuccess}</div>
+            <div style={{ background:"#e8f5e9", border:"1px solid #a5d6a7", borderRadius:"10px", padding:"10px 14px", marginBottom:"12px", fontSize:"13px", color:"#2e7d32", fontWeight:"600" }}>
+              {suggestionSuccess}
+            </div>
           )}
+
           <button onClick={sendSuggestion} disabled={sendingSuggestion || !suggestionText.trim()}
             style={{ width:"100%", padding:"12px", background:sendingSuggestion||!suggestionText.trim()?"#90caf9":"#1565C0", color:"white", border:"none", borderRadius:"10px", fontSize:"14px", fontWeight:"700", cursor:sendingSuggestion||!suggestionText.trim()?"not-allowed":"pointer" }}>
             {sendingSuggestion ? "Sending…" : "📨 Send Suggestion"}
           </button>
         </div>
 
+        {/* ── FOOTER ── */}
         <div style={{ marginTop:"28px", marginBottom:"16px", textAlign:"center" }}>
           <div style={{ fontSize:"20px", marginBottom:"6px" }}>🚗</div>
           <div style={{ fontSize:"14px", fontWeight:"700", color:"#1a1a1a", marginBottom:"4px" }}>Smart Commute</div>
@@ -984,7 +1070,9 @@ export default function Home() {
               <span key={m} style={{ fontSize:"12px", color:"#1565C0", fontWeight:"600" }}>{m}</span>
             ))}
           </div>
-          <a href="mailto:shaikhamad67612@gmail.com" style={{ fontSize:"13px", color:"#1565C0", fontWeight:"600", textDecoration:"none" }}>shaikhamad67612@gmail.com</a>
+          <a href="mailto:shaikhamad67612@gmail.com" style={{ fontSize:"13px", color:"#1565C0", fontWeight:"600", textDecoration:"none" }}>
+            shaikhamad67612@gmail.com
+          </a>
           <div style={{ fontSize:"11px", color:"#ccc", marginTop:"14px" }}>© {new Date().getFullYear()} Smart Commute · Built for Hyderabad</div>
         </div>
       </div>
