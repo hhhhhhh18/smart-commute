@@ -409,6 +409,39 @@ export default function LoginPage() {
         .sign-btn:hover { background: #1255a8 !important; }
         .eye-btn { background: none; border: none; cursor: pointer; color: #9ca3af; padding: 0; display: flex; align-items: center; }
         .eye-btn:hover { color: #555; }
+        .mobile-brand {
+  display: none;
+}
+
+@media (max-width: 768px) {
+
+  .mobile-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+
+    margin-bottom: 28px;
+  }
+
+  .mobile-brand-icon {
+    font-size: 42px;
+    margin-bottom: 10px;
+  }
+
+  .mobile-brand-title {
+    margin: 0;
+    font-size: 30px;
+    font-weight: 900;
+    color: #0f172a;
+  }
+
+  .mobile-brand-subtitle {
+    margin-top: 8px;
+    color: #64748b;
+    font-size: 14px;
+  }
+}
       `}</style>
 
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" }}>
@@ -452,6 +485,17 @@ export default function LoginPage() {
                 <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
               </div>
             }>
+              <div className="mobile-brand">
+  <div className="mobile-brand-icon">🚌</div>
+
+  <h1 className="mobile-brand-title">
+    Smart Commute
+  </h1>
+
+  <p className="mobile-brand-subtitle">
+    All Routes. One Destination.
+  </p>
+</div>
               <LoginForm />
             </Suspense>
           </div>

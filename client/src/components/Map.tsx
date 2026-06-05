@@ -34,6 +34,7 @@ export default function Map({ fromCoords, toCoords, routeConfig, selectedRouteId
   const locationRef  = useRef<any>(null);
   const watchIdRef   = useRef<number | null>(null);
   const initedRef    = useRef(false);
+  const LRef         = useRef<any>(null);
 
   // ── Init map once ─────────────────────────────────────────────
   useEffect(() => {
@@ -48,6 +49,9 @@ export default function Map({ fromCoords, toCoords, routeConfig, selectedRouteId
 
     import("leaflet").then((L) => {
       if (!containerRef.current || mapRef.current) return;
+
+      LRef.current = L;
+
       const el = containerRef.current as any;
       if (el._leaflet_id) el._leaflet_id = null;
 
@@ -58,29 +62,37 @@ export default function Map({ fromCoords, toCoords, routeConfig, selectedRouteId
       ).addTo(map);
       mapRef.current = map;
 
-      // Live location tracking
       if (navigator.geolocation) {
         const id = navigator.geolocation.watchPosition(
           (pos) => {
-            import("leaflet").then((L2) => {
-              if (!mapRef.current) return;
-              if (locationRef.current) mapRef.current.removeLayer(locationRef.current);
-              const icon = L2.divIcon({
-                className: "",
-                html: `<div style="
-                  width:16px;height:16px;
-                  background:#4285F4;
-                  border:3px solid white;
-                  border-radius:50%;
-                  box-shadow:0 0 0 6px rgba(66,133,244,0.25);
-                "></div>`,
-                iconAnchor: [8, 8],
-              });
-              locationRef.current = L2.marker(
-                [pos.coords.latitude, pos.coords.longitude],
-                { icon }
-              ).addTo(mapRef.current);
+            if (!mapRef.current || !LRef.current) return;
+
+            const L2 = LRef.current;
+            const latlng: [number, number] = [
+              pos.coords.latitude,
+              pos.coords.longitude,
+            ];
+
+            if (
+              locationRef.current &&
+              mapRef.current.hasLayer(locationRef.current)
+            ) {
+              locationRef.current.setLatLng(latlng);
+              return;
+            }
+
+            const icon = L2.divIcon({
+              className: "",
+              html: `<div style="
+                width:16px;height:16px;
+                background:#4285F4;
+                border:3px solid white;
+                border-radius:50%;
+                box-shadow:0 0 0 6px rgba(66,133,244,0.25);
+              "></div>`,
+              iconAnchor: [8, 8],
             });
+            locationRef.current = L2.marker(latlng, { icon }).addTo(mapRef.current);
           },
           () => {},
           { enableHighAccuracy: true, maximumAge: 5000 }
@@ -146,10 +158,9 @@ export default function Map({ fromCoords, toCoords, routeConfig, selectedRouteId
 
         const { activeMode, trafficLevel, busStops, metroInfo, allRoutes } = routeConfig;
         const baseMode   = activeMode.startsWith("self_") ? activeMode.replace("self_", "") : activeMode;
-        const routeColor = baseMode === "metro" ? "#E53935" : "#1A73E8"; // always blue except metro
+        const routeColor = baseMode === "metro" ? "#E53935" : "#1A73E8";
         const bounds     = L.latLngBounds([]);
 
-        // ── Fallback if no allRoutes ──────────────────────────
         if (!allRoutes?.length) {
           if (!fromCoords || !toCoords) return;
 
@@ -177,21 +188,18 @@ export default function Map({ fromCoords, toCoords, routeConfig, selectedRouteId
           return;
         }
 
-        // ── Draw all routes ───────────────────────────────────
         allRoutes.forEach((route: any, idx: number) => {
           const isPrimary = idx === selectedRouteIdx;
           const coords    = route.geometry.coordinates;
           const latLngs   = coords.map((c: number[]) => [c[1], c[0]]);
 
           if (!isPrimary) {
-            // Alternative route — grey dashed, clickable
             const altPoly = L.polyline(latLngs, {
               color: "#BDBDBD", weight: 5, opacity: 0.5, dashArray: "10 8",
             }).addTo(map);
             altPoly.on("click", () => { if (onRouteSelect) onRouteSelect(idx); });
             bounds.extend(altPoly.getBounds());
 
-            // Time pill on alternative
             const altMid  = coords[Math.floor(coords.length * 0.5)];
             const altIcon = L.divIcon({
               className: "",
@@ -211,20 +219,15 @@ export default function Map({ fromCoords, toCoords, routeConfig, selectedRouteId
             return;
           }
 
-          // ── Primary route ─────────────────────────────────
-
-          // 1. Full blue base line
           const basePoly = L.polyline(latLngs, {
             color: routeColor, weight: 6, opacity: 1,
           }).addTo(map);
           layersRef.current.push(basePoly);
           bounds.extend(basePoly.getBounds());
 
-          // 2. Traffic overlay — yellow/red segments on top of blue
           if (trafficLevel && trafficLevel !== "low") {
             const trafficColor = trafficLevel === "high" ? "#EA4335" : "#F9A825";
 
-            // First congestion zone (38–52% of route)
             const s1   = Math.floor(coords.length * 0.38);
             const e1   = Math.floor(coords.length * 0.52);
             const seg1 = coords.slice(s1, e1).map((c: number[]) => [c[1], c[0]]);
@@ -233,7 +236,6 @@ export default function Map({ fromCoords, toCoords, routeConfig, selectedRouteId
               layersRef.current.push(tp1);
             }
 
-            // Second zone for heavy traffic (65–75%)
             if (trafficLevel === "high") {
               const s2   = Math.floor(coords.length * 0.65);
               const e2   = Math.floor(coords.length * 0.75);
@@ -245,7 +247,6 @@ export default function Map({ fromCoords, toCoords, routeConfig, selectedRouteId
             }
           }
 
-          // 3. Time pill label (Google Maps style)
           const midCoord = coords[Math.floor(coords.length * 0.5)];
           const timeMin  = route.trafficDuration ?? route.durationMin;
           const timeIcon = L.divIcon({
@@ -263,7 +264,6 @@ export default function Map({ fromCoords, toCoords, routeConfig, selectedRouteId
             L.marker([midCoord[1], midCoord[0]], { icon: timeIcon }).addTo(map)
           );
 
-          // 4. Bus stops
           if (baseMode === "bus" && busStops.length > 0) {
             const step = Math.floor(coords.length / (busStops.length + 1));
             busStops.forEach((stop: string, i: number) => {
@@ -287,19 +287,16 @@ export default function Map({ fromCoords, toCoords, routeConfig, selectedRouteId
             });
           }
 
-          // 5. Metro stations
           if (baseMode === "metro" && metroInfo) {
             const fromC = METRO_LINE_COLORS[metroInfo.fromLine] || "#E53935";
             const toC   = METRO_LINE_COLORS[metroInfo.toLine]   || fromC;
 
-            // Restyle line with metro color
             basePoly.setStyle({ color: fromC, weight: 7 });
 
             const stations: { coord: number[]; label: string; bg: string; big: boolean }[] = [
               { coord: coords[0], label: `🚇 ${metroInfo.fromStation}`, bg: fromC, big: true },
             ];
 
-            // Intermediate stations
             if (metroInfo.intermediateStations?.length > 0) {
               const step2 = Math.floor(coords.length / (metroInfo.intermediateStations.length + 1));
               metroInfo.intermediateStations.forEach((st: string, i: number) => {
@@ -357,7 +354,18 @@ export default function Map({ fromCoords, toCoords, routeConfig, selectedRouteId
   return (
     <>
       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-      <div ref={containerRef} style={{ width: "100%", height: "450px", borderRadius: "12px" }} />
+      {/* ── ONLY CSS CHANGE: map height responsive, no logic touched ── */}
+      <style>{`
+        .sc-map-container {
+          height: 450px;
+        }
+        @media (max-width: 600px) {
+          .sc-map-container {
+            height: 320px;
+          }
+        }
+      `}</style>
+      <div ref={containerRef} className="sc-map-container" style={{ width: "100%", borderRadius: "12px" }} />
     </>
   );
 }

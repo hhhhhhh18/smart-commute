@@ -161,20 +161,56 @@ export default function Navigation({
   const currentStep = steps[currentStepIdx] || steps[0];
 
   // ONE reusable place-marker function — always removes old, creates fresh
-  const placeMarker = (lat: number, lng: number, bearing: number = 0) => {
+  const placeMarker = (
+    lat: number,
+    lng: number,
+    bearing: number = 0
+  ) => {
+  
     if (!mapRef.current || !LRef.current) return;
+  
     const L = LRef.current;
-    if (markerRef.current) {
-      markerRef.current.remove();
-      markerRef.current = null;
+  
+    // UPDATE existing marker instead of recreating
+    if (
+      markerRef.current &&
+      mapRef.current.hasLayer(markerRef.current)
+    ) {
+  
+      markerRef.current.setLatLng([lat, lng]);
+  
+      const updatedIcon = L.divIcon({
+        className: "",
+        html: buildArrowMarkerHtml(
+          cfg.color,
+          bearing,
+          cfg.icon
+        ),
+        iconSize: [64, 64],
+        iconAnchor: [32, 32],
+      });
+  
+      markerRef.current.setIcon(updatedIcon);
+  
+      return;
     }
+  
+    // CREATE marker only if missing
     const icon = L.divIcon({
       className: "",
-      html: buildArrowMarkerHtml(cfg.color, bearing, cfg.icon),
-      iconSize:   [64, 64],
+      html: buildArrowMarkerHtml(
+        cfg.color,
+        bearing,
+        cfg.icon
+      ),
+      iconSize: [64, 64],
       iconAnchor: [32, 32],
     });
-    markerRef.current = L.marker([lat, lng], { icon }).addTo(mapRef.current);
+  
+    markerRef.current = L.marker(
+      [lat, lng],
+      { icon }
+    ).addTo(mapRef.current);
   };
 
   useEffect(() => {
@@ -375,7 +411,10 @@ export default function Navigation({
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
-      
+      if (markerRef.current) {
+        markerRef.current.remove();
+        markerRef.current = null;
+      }
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
