@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -441,10 +440,20 @@ export default function Home() {
   const fromAC = useAutocomplete(from);
   const toAC   = useAutocomplete(to);
 
-  // ── SPLASH: always show for exactly 4 seconds on every page load,
-  //    then redirect to /auth/login regardless of auth state ────────────────
+  // ── SPLASH FIX: show 4-second splash only on first visit per browser session.
+  //    sessionStorage is cleared when the tab/browser closes, so new sessions
+  //    always get the splash. Within the same session (e.g. after login),
+  //    the splash is skipped immediately so the user lands on the app.
   useEffect(() => {
+    const alreadySeen = sessionStorage.getItem("splashSeen");
+    if (alreadySeen) {
+      // Already shown this session (e.g. user just logged in) — skip splash
+      setSplashDone(true);
+      return;
+    }
+    // First time this session — show splash for 4s then redirect to login
     const t = setTimeout(() => {
+      sessionStorage.setItem("splashSeen", "1");
       setSplashDone(true);
       router.push("/auth/login");
     }, 4000);
@@ -490,12 +499,17 @@ export default function Home() {
   }, []);
 
   // ── CONDITIONAL RENDER — after ALL hooks ─────────────────────────────────
-  // Show splash for the first 4 seconds on every visit
+  // Show splash while the 4-second timer is running (first visit only)
   if (!splashDone) return <SplashScreen />;
 
-  // After splash, if not authenticated NextAuth will handle redirect via /auth/login
-  // (router.push already called above); show splash until navigation completes
-  if (status === "loading" || status === "unauthenticated") return <SplashScreen />;
+  // Auth loading — brief spinner while NextAuth resolves session
+  if (status === "loading") return <SplashScreen />;
+
+  // Not authenticated — redirect to login without showing splash again
+  if (status === "unauthenticated") {
+    router.push("/auth/login");
+    return null;
+  }
 
   // ── Helper functions (not hooks) ──────────────────────────────────────────
   function doGetLocation() {
