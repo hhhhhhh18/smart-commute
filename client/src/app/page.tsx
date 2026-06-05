@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -299,7 +300,7 @@ function LocationPrompt({ onAllow, onAllowOnce, onDeny }: { onAllow: () => void;
   );
 }
 
-// ── Splash screen component (no hooks inside, pure UI) ──────────────────────
+// ── Pure splash UI, no hooks ────────────────────────────────────────────────
 function SplashScreen() {
   return (
     <div style={{
@@ -309,19 +310,21 @@ function SplashScreen() {
       fontFamily:"'Segoe UI',sans-serif", overflow:"hidden",
     }}>
       <style>{`
-        @keyframes splashBus  { 0%{transform:translateX(-80px);opacity:0} 15%{opacity:1} 85%{opacity:1} 100%{transform:translateX(80px);opacity:0} }
+        @keyframes splashBus  { 0%{transform:translateX(-90px);opacity:0} 15%{opacity:1} 85%{opacity:1} 100%{transform:translateX(90px);opacity:0} }
         @keyframes splashRing { 0%,100%{transform:scale(1);opacity:.12} 50%{transform:scale(1.2);opacity:.28} }
         @keyframes splashUp   { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
         @keyframes splashDot  { 0%,80%,100%{opacity:.25} 40%{opacity:1} }
-        .spl-ring { position:absolute;border-radius:50%;border:1.5px solid #64b5f6; }
-        .spl-ring-1 { width:240px;height:240px;animation:splashRing 2.4s ease-in-out infinite; }
-        .spl-ring-2 { width:360px;height:360px;animation:splashRing 2.4s ease-in-out infinite .6s; }
-        .spl-ring-3 { width:480px;height:480px;animation:splashRing 2.4s ease-in-out infinite 1.2s; }
-        .spl-bus    { position:absolute;bottom:96px;font-size:30px;animation:splashBus 2s ease-in-out infinite;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5)); }
-        .spl-up     { animation:splashUp .7s ease both; }
-        .spl-dot    { display:inline-block;animation:splashDot 1.4s infinite; }
+        @keyframes splashBar  { from{width:0%} to{width:100%} }
+        .spl-ring{position:absolute;border-radius:50%;border:1.5px solid #64b5f6;}
+        .spl-ring-1{width:240px;height:240px;animation:splashRing 2.4s ease-in-out infinite;}
+        .spl-ring-2{width:360px;height:360px;animation:splashRing 2.4s ease-in-out infinite .6s;}
+        .spl-ring-3{width:480px;height:480px;animation:splashRing 2.4s ease-in-out infinite 1.2s;}
+        .spl-bus{position:absolute;bottom:96px;font-size:30px;animation:splashBus 2.2s ease-in-out infinite;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5));}
+        .spl-up{animation:splashUp .7s ease both;}
+        .spl-dot{display:inline-block;animation:splashDot 1.4s infinite;}
         .spl-dot:nth-child(2){animation-delay:.2s}
         .spl-dot:nth-child(3){animation-delay:.4s}
+        .spl-bar{height:3px;border-radius:3px;background:linear-gradient(to right,#64b5f6,#fff);animation:splashBar 4s linear forwards;}
       `}</style>
 
       {/* Rings */}
@@ -335,13 +338,15 @@ function SplashScreen() {
         display:"flex", alignItems:"flex-end", justifyContent:"center", gap:"5px", overflow:"hidden" }}>
         {[36,52,42,68,48,62,40,56,46,60,38,50].map((h,i) => (
           <div key={i} style={{ width:"20px", height:`${h}px`, flexShrink:0,
-            background: i%3===0?"#1a3a6e":i%3===1?"#162d5a":"#1e3f7a",
+            background:i%3===0?"#1a3a6e":i%3===1?"#162d5a":"#1e3f7a",
             borderRadius:"3px 3px 0 0" }} />
         ))}
       </div>
+
       {/* Metro line */}
       <div style={{ position:"absolute", bottom:"90px", left:0, right:0, height:"3px",
         background:"linear-gradient(to right,transparent,#e53935 20%,#e53935 80%,transparent)", opacity:.55 }} />
+
       {/* Moving bus */}
       <div className="spl-bus">🚌</div>
 
@@ -362,7 +367,7 @@ function SplashScreen() {
         </div>
 
         {/* Mode pills */}
-        <div style={{ display:"flex", gap:"8px", justifyContent:"center", marginTop:"26px", flexWrap:"wrap" }}>
+        <div style={{ display:"flex", gap:"8px", justifyContent:"center", marginTop:"22px", flexWrap:"wrap" }}>
           {[["🚇","Metro"],["🚌","Bus"],["🏍️","Bike"],["🚗","Car"]].map(([ic,lb]) => (
             <div key={lb} style={{ display:"flex", alignItems:"center", gap:"5px",
               background:"rgba(255,255,255,.10)", border:"1px solid rgba(255,255,255,.18)",
@@ -372,8 +377,14 @@ function SplashScreen() {
           ))}
         </div>
 
+        {/* Progress bar — 4 s matches the redirect timer */}
+        <div style={{ marginTop:"36px", width:"180px", height:"3px",
+          background:"rgba(255,255,255,.15)", borderRadius:"3px", overflow:"hidden", margin:"36px auto 0" }}>
+          <div className="spl-bar" />
+        </div>
+
         {/* Loading dots */}
-        <div style={{ marginTop:"38px", fontSize:"20px", color:"rgba(255,255,255,.6)" }}>
+        <div style={{ marginTop:"14px", fontSize:"18px", color:"rgba(255,255,255,.5)" }}>
           <span className="spl-dot">●</span>
           <span className="spl-dot"> ●</span>
           <span className="spl-dot"> ●</span>
@@ -384,7 +395,9 @@ function SplashScreen() {
 }
 
 export default function Home() {
-  // ── ALL STATE & REFS (hooks must come before any conditional return) ──────
+  // ── ALL STATE (hooks always before any conditional return) ────────────────
+  const [splashDone, setSplashDone] = useState(false);
+
   const [from, setFrom] = useState("");
   const [to, setTo]     = useState("");
   const fromCoordsSelected = useRef<{ lat: number; lon: number } | null>(null);
@@ -428,31 +441,33 @@ export default function Home() {
   const fromAC = useAutocomplete(from);
   const toAC   = useAutocomplete(to);
 
-  // ── SPLASH redirect — runs regardless of auth status ─────────────────────
+  // ── SPLASH: always show for exactly 4 seconds on every page load,
+  //    then redirect to /auth/login regardless of auth state ────────────────
   useEffect(() => {
-    if (status === "unauthenticated") {
-      const t = setTimeout(() => router.push("/auth/login"), 2000);
-      return () => clearTimeout(t);
-    }
-  }, [status, router]);
+    const t = setTimeout(() => {
+      setSplashDone(true);
+      router.push("/auth/login");
+    }, 4000);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── All other effects (run only when authenticated, but hooks always called) ──
+  // ── Home page effects — only run after splash + when authenticated ────────
   useEffect(() => {
-    if (status !== "authenticated") return;
+    if (!splashDone || status !== "authenticated") return;
     function handleClickOutside(e: MouseEvent) {
       if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) setShowProfileMenu(false);
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [status]);
+  }, [splashDone, status]);
 
   useEffect(() => {
-    if (status !== "authenticated") return;
+    if (!splashDone || status !== "authenticated") return;
     if (typeof window !== "undefined") loadGoogleMapsScript().catch(() => {});
-  }, [status]);
+  }, [splashDone, status]);
 
   useEffect(() => {
-    if (status !== "authenticated") return;
+    if (!splashDone || status !== "authenticated") return;
     async function init() {
       const stored = localStorage.getItem(LS_KEY);
       let browserState: PermissionState | null = null;
@@ -466,7 +481,7 @@ export default function Home() {
       setTimeout(() => setShowLocationPrompt(true), 600);
     }
     init();
-  }, [status]);
+  }, [splashDone, status]);
 
   const triggerDraw = useCallback((mode: string, extraData?: RouteData) => {
     const d = extraData ?? dataRef.current;
@@ -475,11 +490,14 @@ export default function Home() {
   }, []);
 
   // ── CONDITIONAL RENDER — after ALL hooks ─────────────────────────────────
-  if (status === "loading" || status === "unauthenticated") {
-    return <SplashScreen />;
-  }
+  // Show splash for the first 4 seconds on every visit
+  if (!splashDone) return <SplashScreen />;
 
-  // ── Helper functions (not hooks, safe after conditional return) ───────────
+  // After splash, if not authenticated NextAuth will handle redirect via /auth/login
+  // (router.push already called above); show splash until navigation completes
+  if (status === "loading" || status === "unauthenticated") return <SplashScreen />;
+
+  // ── Helper functions (not hooks) ──────────────────────────────────────────
   function doGetLocation() {
     if (!navigator.geolocation) { setLocationStatus("denied"); return; }
     navigator.geolocation.getCurrentPosition(
@@ -511,7 +529,6 @@ export default function Home() {
     }
     localStorage.removeItem(LS_KEY); setShowLocationPrompt(true);
   }
-
   async function sendSuggestion() {
     if (!suggestionText.trim()) { alert("Please enter a suggestion."); return; }
     setSendingSuggestion(true); setSuggestionSuccess("");
@@ -524,7 +541,6 @@ export default function Home() {
     } catch { alert("Something went wrong. Please try again."); }
     finally  { setSendingSuggestion(false); }
   }
-
   const fetchRoutes = async () => {
     if (!from || !to) return;
     setLoading(true); setRouteConfig(EMPTY_CONFIG); setSelectedRouteIdx(0);
@@ -540,7 +556,6 @@ export default function Home() {
     } catch { alert("Could not fetch route. Check your backend is running."); }
     finally  { setLoading(false); }
   };
-
   const handleSaveRoute = async () => {
     const d = dataRef.current; if (!d) return;
     setSavingRoute(true);
@@ -550,7 +565,6 @@ export default function Home() {
     } catch {}
     setSavingRoute(false);
   };
-
   const handleCardClick = (mode: string) => {
     if (SUB_OPTIONS[mode]) { setModal(mode); return; }
     if (mode === "bus")   { triggerDraw("bus"); setShowBusNav(true); return; }
@@ -571,10 +585,10 @@ export default function Home() {
     finally { setNavLoading(false); }
   };
 
-  const fromCoords = data?.fromCoords ? ([data.fromCoords.lat, data.fromCoords.lon] as [number,number]) : null;
-  const toCoords   = data?.toCoords   ? ([data.toCoords.lat,   data.toCoords.lon  ] as [number,number]) : null;
-  const traffic    = data ? TRAFFIC_CONFIG[data.trafficLevel] : null;
-  const activeMode = routeConfig.activeMode;
+  const fromCoords   = data?.fromCoords ? ([data.fromCoords.lat, data.fromCoords.lon] as [number,number]) : null;
+  const toCoords     = data?.toCoords   ? ([data.toCoords.lat,   data.toCoords.lon  ] as [number,number]) : null;
+  const traffic      = data ? TRAFFIC_CONFIG[data.trafficLevel] : null;
+  const activeMode   = routeConfig.activeMode;
   const showStartBtn = selfModes.includes(activeMode) && !!data;
 
   return (
