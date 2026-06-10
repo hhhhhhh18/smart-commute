@@ -15,8 +15,19 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BusRoute – TSRTC Bus Finder",
-  description: "Find TSRTC bus routes in Hyderabad",
+  title: "Smart Commute – Hyderabad",
+  description: "All Routes. One Destination. Find TSRTC bus, Metro, Bike and Car routes in Hyderabad.",
+  manifest: "/manifest.json",
+  themeColor: "#1565C0",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Smart Commute",
+  },
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/icon-192.png",
+  },
 };
 
 export default function RootLayout({
