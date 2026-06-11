@@ -1,22 +1,24 @@
 {
-    "name": "Smart Commute",
-    "short_name": "SmartCommute",
-    "description": "All Routes. One Destination. Hyderabad",
-    "start_url": "/",
-    "display": "standalone",
-    "background_color": "#0d1b3e",
-    "theme_color": "#1565C0",
-    "orientation": "portrait",
-    "icons": [
-      {
-        "src": "/icon-192.png",
-        "sizes": "192x192",
-        "type": "image/png"
-      },
-      {
-        "src": "/icon-512.png",
-        "sizes": "512x512",
-        "type": "image/png"
-      }
-    ]
-  }
+  "id": "/",
+  "name": "Smart Commute",
+  "short_name": "SmartCommute",
+  "description": "All Routes. One Destination. Hyderabad",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0d1b3e",
+  "theme_color": "#1565C0",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

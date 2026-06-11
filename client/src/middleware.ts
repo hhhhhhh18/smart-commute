@@ -8,12 +8,15 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/auth/") ||
     pathname.startsWith("/api/auth/") ||
     pathname.startsWith("/_next/") ||
-    pathname === "/favicon.ico"
+    pathname === "/favicon.ico" ||
+    pathname === "/manifest.json" ||
+    pathname === "/sw.js" ||
+    pathname.startsWith("/workbox-") ||
+    pathname.match(/\/icon-.*\.png$/) !== null
   ) {
     return NextResponse.next();
   }
 
-  
   const sessionToken =
     req.cookies.get("next-auth.session-token")?.value ||
     req.cookies.get("__Secure-next-auth.session-token")?.value;
