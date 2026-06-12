@@ -824,6 +824,29 @@ export default function Home() {
             {loading ? "Finding routes…" : "🔍 Find Route"}
           </button>
         </div>
+        <a
+  href="https://drive.google.com/uc?export=download&id=1uLZonpUr-6KMDrMRg3wFSNQWdpRnlEt9"
+  target="_blank"
+  rel="noopener noreferrer"
+  style={{ textDecoration: "none" }}
+>
+  <button
+    style={{
+      width: "100%",
+      marginTop: "10px",
+      background: "#34A853",
+      color: "white",
+      border: "none",
+      borderRadius: "10px",
+      padding: "13px",
+      fontSize: "15px",
+      fontWeight: "700",
+      cursor: "pointer",
+    }}
+  >
+    📲 Download Android App
+  </button>
+</a>
 
         {/* Map */}
         <div className="sc-map-wrap">
@@ -1076,6 +1099,7 @@ export default function Home() {
               <span key={m} style={{ fontSize:"12px", color:"#1565C0", fontWeight:"600" }}>{m}</span>
             ))}
           </div>
+          <div style={{ fontSize:"12px", color:"#888", marginBottom:"10px" }}>For any Queries contact</div>
           <a href="mailto:shaikhamad67612@gmail.com" style={{ fontSize:"13px", color:"#1565C0", fontWeight:"600", textDecoration:"none" }}>
             shaikhamad67612@gmail.com
           </a>
