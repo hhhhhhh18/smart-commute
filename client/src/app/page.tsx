@@ -442,13 +442,19 @@ export default function Home() {
   useEffect(() => {
     const alreadySeen = sessionStorage.getItem("splashSeen");
     if (alreadySeen) { setSplashDone(true); return; }
+  
     const t = setTimeout(() => {
       sessionStorage.setItem("splashSeen", "1");
       setSplashDone(true);
-      router.push("/auth/login");
+      // Only send to login if NOT authenticated.
+      // status is "loading" | "authenticated" | "unauthenticated"
+      if (status === "unauthenticated") {
+        router.push("/auth/login");
+      }
     }, 4000);
     return () => clearTimeout(t);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
+    
 
   useEffect(() => {
     if (!splashDone || status !== "authenticated") return;

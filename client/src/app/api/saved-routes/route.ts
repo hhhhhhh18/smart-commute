@@ -9,14 +9,9 @@ export async function GET() {
   if (!session?.user?.email)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { rows: [user] } = await pool.query(
-    "SELECT id FROM users WHERE email = $1", [session.user.email]
-  );
-  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
-
   const { rows } = await pool.query(
-    "SELECT * FROM saved_routes WHERE user_id = $1 ORDER BY created_at DESC",
-    [user.id]
+    "SELECT * FROM saved_routes WHERE user_email = $1 ORDER BY created_at DESC",
+    [session.user.email]
   );
   return NextResponse.json(rows);
 }
@@ -31,23 +26,18 @@ export async function POST(req: NextRequest) {
   if (!from_name || !to_name)
     return NextResponse.json({ error: "from_name and to_name are required" }, { status: 400 });
 
-  const { rows: [user] } = await pool.query(
-    "SELECT id FROM users WHERE email = $1", [session.user.email]
-  );
-  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
-
   // Prevent duplicates
   const { rows: existing } = await pool.query(
-    "SELECT id FROM saved_routes WHERE user_id=$1 AND from_name=$2 AND to_name=$3",
-    [user.id, from_name, to_name]
+    "SELECT id FROM saved_routes WHERE user_email=$1 AND from_name=$2 AND to_name=$3",
+    [session.user.email, from_name, to_name]
   );
   if (existing.length > 0)
     return NextResponse.json({ error: "Route already saved" }, { status: 409 });
 
   const { rows: [saved] } = await pool.query(
-    `INSERT INTO saved_routes (user_id, from_name, to_name, from_lat, from_lng, to_lat, to_lng)
+    `INSERT INTO saved_routes (user_email, from_name, to_name, from_lat, from_lng, to_lat, to_lng)
      VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-    [user.id, from_name, to_name, from_lat ?? null, from_lng ?? null, to_lat ?? null, to_lng ?? null]
+    [session.user.email, from_name, to_name, from_lat ?? null, from_lng ?? null, to_lat ?? null, to_lng ?? null]
   );
   return NextResponse.json(saved, { status: 201 });
 }
@@ -61,13 +51,8 @@ export async function DELETE(req: NextRequest) {
   const { id } = await req.json();
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-  const { rows: [user] } = await pool.query(
-    "SELECT id FROM users WHERE email = $1", [session.user.email]
-  );
-  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
-
   await pool.query(
-    "DELETE FROM saved_routes WHERE id=$1 AND user_id=$2", [id, user.id]
+    "DELETE FROM saved_routes WHERE id=$1 AND user_email=$2", [id, session.user.email]
   );
   return NextResponse.json({ success: true });
 }
