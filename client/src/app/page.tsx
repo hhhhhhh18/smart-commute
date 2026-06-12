@@ -1,11 +1,10 @@
-
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, Suspense } from "react";
 import axios from "axios";
 import dynamic from "next/dynamic";
 import { useSession, signOut } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Navigation from "../components/Navigation";
 import BusNavigation from "../components/BusNavigation";
 import Metronavigation from "../components/Metronavigation";
@@ -66,6 +65,8 @@ const EMPTY_CONFIG: RouteConfig = {
 };
 const selfModes = ["self_bike", "self_car", "metro"];
 const LS_KEY = "locationPermission";
+// ── NEW: key for persisting search/route state across page navigations ──
+const STATE_KEY = "smartCommuteState";
 
 let _gmPromise: Promise<void> | null = null;
 function loadGoogleMapsScript(): Promise<void> {
@@ -388,7 +389,12 @@ function SplashScreen() {
   );
 }
 
-export default function Home() {
+// ─────────────────────────────────────────────────────────────────────────────
+// HomeInner — the actual page content.
+// Wrapped in <Suspense> by the default export below because useSearchParams()
+// requires a Suspense boundary in the Next.js App Router.
+// ─────────────────────────────────────────────────────────────────────────────
+function HomeInner() {
   const [splashDone, setSplashDone] = useState(false);
   const [from, setFrom] = useState("");
   const [to, setTo]     = useState("");
@@ -426,13 +432,14 @@ export default function Home() {
   const [suggestionSuccess, setSuggestionSuccess] = useState("");
   const [starRating,        setStarRating]        = useState(0);
   const [starHovered,       setStarHovered]       = useState(0);
-  // ── NEW: rating-only submit state ─────────────────────────────────────────
+  // ── rating-only submit state ─────────────────────────────────────────
   const [ratingSubmitted,  setRatingSubmitted]  = useState(false);
   const [submittingRating, setSubmittingRating] = useState(false);
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams(); // ── NEW
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const dataRef        = useRef<RouteData | null>(null);
   const navRouteRef    = useRef<{ from: [number,number]; to: [number,number] } | null>(null);
@@ -454,7 +461,35 @@ export default function Home() {
     }, 4000);
     return () => clearTimeout(t);
   }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
-    
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // NEW — Issue 2: Restore persisted search/route state on mount.
+  // Runs once. Restores from/to, selected coords, last fetched route data,
+  // and the route config so the map/cards re-render as they were.
+  // ─────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STATE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.from) setFrom(parsed.from);
+        if (parsed.to)   setTo(parsed.to);
+        if (parsed.fromCoordsSelected) fromCoordsSelected.current = parsed.fromCoordsSelected;
+        if (parsed.toCoordsSelected)   toCoordsSelected.current   = parsed.toCoordsSelected;
+        if (parsed.data) {
+          setData(parsed.data);
+          dataRef.current = parsed.data;
+          if (parsed.data.fromCoords && parsed.data.toCoords) {
+            navRouteRef.current = {
+              from: [parsed.data.fromCoords.lat, parsed.data.fromCoords.lon],
+              to:   [parsed.data.toCoords.lat,   parsed.data.toCoords.lon],
+            };
+          }
+          if (parsed.routeConfig) setRouteConfig(parsed.routeConfig);
+        }
+      }
+    } catch {}
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!splashDone || status !== "authenticated") return;
@@ -493,6 +528,84 @@ export default function Home() {
     setRouteConfig({ drawKey:Math.random(), activeMode:mode, trafficLevel:d.trafficLevel, busStops:d.busInfo?.stopsList??[], metroInfo:d.metroInfo??null, allRoutes:d.allRoutes??[], fromCoords:d.fromCoords?[d.fromCoords.lat,d.fromCoords.lon]:null, toCoords:d.toCoords?[d.toCoords.lat,d.toCoords.lon]:null });
   }, []);
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // fetchRoutes — original version, reads `from`/`to` state.
+  // ─────────────────────────────────────────────────────────────────────────
+  const fetchRoutes = async () => {
+    if (!from || !to) return;
+    setLoading(true); setRouteConfig(EMPTY_CONFIG); setSelectedRouteIdx(0);
+    setNavMode(null); setShowBusNav(false); setShowMetroNav(false); setShowMetroUnavailable(false); setRouteSaved(false);
+    try {
+      const params: any = { from, to };
+      if (fromCoordsSelected.current) { params.fromLat = fromCoordsSelected.current.lat; params.fromLon = fromCoordsSelected.current.lon; }
+      if (toCoordsSelected.current)   { params.toLat = toCoordsSelected.current.lat;     params.toLon = toCoordsSelected.current.lon; }
+      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/routes`, { params });
+      const d: RouteData = res.data;
+      setData(d); dataRef.current = d; triggerDraw("default", d);
+      navRouteRef.current = { from:[d.fromCoords.lat, d.fromCoords.lon], to:[d.toCoords.lat, d.toCoords.lon] };
+    } catch { alert("Could not fetch route. Check your backend is running."); }
+    finally  { setLoading(false); }
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // NEW — fetchRoutesWithValues: same as fetchRoutes but takes explicit
+  // from/to values. Needed because setFrom/setTo from URL params won't have
+  // flushed into the `from`/`to` state yet when triggered right after mount.
+  // ─────────────────────────────────────────────────────────────────────────
+  const fetchRoutesWithValues = async (fromVal: string, toVal: string) => {
+    if (!fromVal || !toVal) return;
+    setLoading(true); setRouteConfig(EMPTY_CONFIG); setSelectedRouteIdx(0);
+    setNavMode(null); setShowBusNav(false); setShowMetroNav(false); setShowMetroUnavailable(false); setRouteSaved(false);
+    try {
+      const params: any = { from: fromVal, to: toVal };
+      if (fromCoordsSelected.current) { params.fromLat = fromCoordsSelected.current.lat; params.fromLon = fromCoordsSelected.current.lon; }
+      if (toCoordsSelected.current)   { params.toLat = toCoordsSelected.current.lat;     params.toLon = toCoordsSelected.current.lon; }
+      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/routes`, { params });
+      const d: RouteData = res.data;
+      setData(d); dataRef.current = d; triggerDraw("default", d);
+      navRouteRef.current = { from:[d.fromCoords.lat, d.fromCoords.lon], to:[d.toCoords.lat, d.toCoords.lon] };
+    } catch { alert("Could not fetch route. Check your backend is running."); }
+    finally  { setLoading(false); }
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // NEW — Issue 1: Read `from`/`to` query params (set by Saved Routes page),
+  // populate the search fields, and auto-run the search.
+  // URL params take priority over restored localStorage state.
+  // ─────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const qFrom = searchParams.get("from");
+    const qTo   = searchParams.get("to");
+    if (qFrom && qTo) {
+      setFrom(qFrom);
+      setTo(qTo);
+      fromCoordsSelected.current = null; // let backend geocode by name
+      toCoordsSelected.current   = null;
+      setTimeout(() => {
+        fetchRoutesWithValues(qFrom, qTo);
+      }, 100);
+    }
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // NEW — Issue 2: Persist from/to/coords/data/routeConfig to localStorage
+  // whenever they change, so navigating to Profile/Settings/Saved Routes and
+  // back restores the same search.
+  // ─────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    try {
+      const toSave = {
+        from,
+        to,
+        fromCoordsSelected: fromCoordsSelected.current,
+        toCoordsSelected:   toCoordsSelected.current,
+        data,
+        routeConfig,
+      };
+      localStorage.setItem(STATE_KEY, JSON.stringify(toSave));
+    } catch {}
+  }, [from, to, data, routeConfig]);
+
   if (!splashDone) return <SplashScreen />;
   if (status === "loading") return <SplashScreen />;
   if (status === "unauthenticated") { router.push("/auth/login"); return null; }
@@ -522,7 +635,7 @@ export default function Home() {
     localStorage.removeItem(LS_KEY); setShowLocationPrompt(true);
   }
 
-  // ── NEW: Submit star rating only (no suggestion text required) ────────────
+  // ── Submit star rating only (no suggestion text required) ────────────
   async function submitRatingOnly() {
     if (starRating === 0) { alert("Please select a star rating first."); return; }
     setSubmittingRating(true);
@@ -571,22 +684,6 @@ export default function Home() {
     } catch { alert("Something went wrong. Please try again."); }
     finally  { setSendingSuggestion(false); }
   }
-
-  const fetchRoutes = async () => {
-    if (!from || !to) return;
-    setLoading(true); setRouteConfig(EMPTY_CONFIG); setSelectedRouteIdx(0);
-    setNavMode(null); setShowBusNav(false); setShowMetroNav(false); setShowMetroUnavailable(false); setRouteSaved(false);
-    try {
-      const params: any = { from, to };
-      if (fromCoordsSelected.current) { params.fromLat = fromCoordsSelected.current.lat; params.fromLon = fromCoordsSelected.current.lon; }
-      if (toCoordsSelected.current)   { params.toLat = toCoordsSelected.current.lat;     params.toLon = toCoordsSelected.current.lon; }
-      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/routes`, { params });
-      const d: RouteData = res.data;
-      setData(d); dataRef.current = d; triggerDraw("default", d);
-      navRouteRef.current = { from:[d.fromCoords.lat, d.fromCoords.lon], to:[d.toCoords.lat, d.toCoords.lon] };
-    } catch { alert("Could not fetch route. Check your backend is running."); }
-    finally  { setLoading(false); }
-  };
 
   const handleSaveRoute = async () => {
     const d = dataRef.current; if (!d) return;
@@ -824,29 +921,7 @@ export default function Home() {
             {loading ? "Finding routes…" : "🔍 Find Route"}
           </button>
         </div>
-        <a
-  href="https://drive.google.com/uc?export=download&id=1uLZonpUr-6KMDrMRg3wFSNQWdpRnlEt9"
-  target="_blank"
-  rel="noopener noreferrer"
-  style={{ textDecoration: "none" }}
->
-  <button
-    style={{
-      width: "100%",
-      marginTop: "10px",
-      background: "#34A853",
-      color: "white",
-      border: "none",
-      borderRadius: "10px",
-      padding: "13px",
-      fontSize: "15px",
-      fontWeight: "700",
-      cursor: "pointer",
-    }}
-  >
-    📲 Download Android App
-  </button>
-</a>
+        
 
         {/* Map */}
         <div className="sc-map-wrap">
@@ -1107,5 +1182,17 @@ export default function Home() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Default export — wraps HomeInner in <Suspense> because useSearchParams()
+// requires a Suspense boundary in the Next.js App Router.
+// ─────────────────────────────────────────────────────────────────────────────
+export default function Home() {
+  return (
+    <Suspense fallback={<SplashScreen />}>
+      <HomeInner />
+    </Suspense>
   );
 }
